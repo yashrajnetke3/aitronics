@@ -1,0 +1,169 @@
+package com.aitronics.assistant
+
+import android.Manifest
+import android.app.*
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
+import android.os.*
+import android.speech.tts.TextToSpeech
+import androidx.compose.runtime.*
+import org.json.JSONObject
+import org.vosk.Model
+import org.vosk.Recognizer
+import java.io.File
+import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.zip.ZipInputStream
+
+class BackgroundWake : Service() {
+    companion object {
+        var running by mutableStateOf(false)
+            private set
+        var status by mutableStateOf("")
+            private set
+        var foregroundCommand: ((String) -> Boolean)? = null
+        private var pending: Pair<String,String>? = null
+        private var expires = 0L
+        fun take(ticket: String?): String? {
+            val item = pending ?: return null
+            if (ticket != item.first || SystemClock.elapsedRealtime() > expires) return null
+            pending = null
+            return item.second
+        }
+        private val audioWorker = Executors.newSingleThreadExecutor()
+        private const val channel = "background_wake"
+        private const val id = 721
+    }
+
+    private val handler = Handler(Looper.getMainLooper())
+    @Volatile private var live = false
+    private var triggeredUntil = 0L
+    private var phrase = "hey aitronics"
+    private var speaker: TextToSpeech? = null
+    private var speechReady = false
+    private val notifications get() = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+    override fun onBind(intent: Intent?) = null
+    private fun notice(message: String, ticket: String? = null): Notification {
+        val open = Intent(this, MainActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        if (ticket != null) open.putExtra("wakeTicket", ticket)
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        val stop = PendingIntent.getService(this,1,Intent(this,BackgroundWake::class.java).setAction("STOP"),flags)
+        return Notification.Builder(this,channel).setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setContentTitle("AITRONICS · Background wake").setContentText(message)
+            .setContentIntent(PendingIntent.getActivity(this,0,open,flags)).setOngoing(true)
+            .setVisibility(Notification.VISIBILITY_PRIVATE).setOnlyAlertOnce(true)
+            .addAction(Notification.Action.Builder(null,"Stop",stop).build()).build()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == "STOP" || intent == null) { stopSelf(); return START_NOT_STICKY }
+        if (live) return START_NOT_STICKY
+        notifications.createNotificationChannel(NotificationChannel(channel,"Background wake",NotificationManager.IMPORTANCE_LOW))
+        if (!notifications.areNotificationsEnabled() || notifications.getNotificationChannel(channel).importance == NotificationManager.IMPORTANCE_NONE) {
+            status = "Enable background wake notifications in Android settings."; stopSelf(); return START_NOT_STICKY
+        }
+        phrase = intent.getStringExtra("phrase")?.trim()?.ifBlank { "hey aitronics" } ?: "hey aitronics"
+        try { startForeground(id,notice("Preparing offline voice recognition…")) }
+        catch (_: RuntimeException) { status = "Open AITRONICS and enable microphone access to start wake mode."; stopSelf(); return START_NOT_STICKY }
+        live = true; running = true; status = "Preparing offline voice recognition…"
+        if (intent.getBooleanExtra("speak",true)) speaker = TextToSpeech(this) { speechReady = it == TextToSpeech.SUCCESS }
+        audioWorker.execute {
+            try { capture() } catch (_: Exception) { fail("Microphone or voice model unavailable. Stop other recordings and try again.") }
+            catch (_: LinkageError) { fail("The offline speech engine is unavailable on this device.") }
+        }
+        return START_NOT_STICKY
+    }
+    private fun fail(reason: String) = handler.post { if (live) { status = reason; stopSelf() } }
+    private fun update(message: String, ticket: String? = null) {
+        status = message
+        notifications.notify(id,notice(message,ticket))
+    }
+    private fun modelPath(): File {
+        val name = "vosk-model-small-en-us-0.15"
+        val ready = File(noBackupFilesDir,name)
+        if (ready.isDirectory) return ready
+        val stage = File(noBackupFilesDir,"wake-model-partial")
+        stage.deleteRecursively(); check(stage.mkdirs())
+        try {
+            ZipInputStream(assets.open("wake-en-015.zip")).use { zip ->
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    check(live)
+                    if (!entry.isDirectory) {
+                        require(entry.name.startsWith("$name/"))
+                        val dest = File(stage,entry.name.removePrefix("$name/")).canonicalFile
+                        require(dest.path.startsWith(stage.canonicalPath + File.separator))
+                        dest.parentFile?.mkdirs()
+                        dest.outputStream().use { zip.copyTo(it) }
+                    }
+                }
+            }
+            check(stage.renameTo(ready))
+        } finally { stage.deleteRecursively() }
+        return ready
+    }
+    private fun capture() {
+        val path = modelPath()
+        if (!live) return
+        Model(path.path).use { model -> Recognizer(model,16000f).use { decoder ->
+            if (!live) return
+            check(checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+            val minimum = AudioRecord.getMinBufferSize(16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT)
+            require(minimum > 0)
+            val mic = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,maxOf(minimum,8192))
+            try {
+                check(mic.state == AudioRecord.STATE_INITIALIZED)
+                mic.startRecording()
+                check(mic.recordingState == AudioRecord.RECORDSTATE_RECORDING)
+                handler.post { if (live) update("Listening for “$phrase”") }
+                val samples = ShortArray(1600)
+                while(live) {
+                    val count = mic.read(samples,0,samples.size)
+                    check(count > 0)
+                    if (decoder.acceptWaveForm(samples,count)) {
+                        val words = JSONObject(decoder.result).optString("text")
+                        if (words.isNotBlank()) handler.post { if (live) heard(words) }
+                    }
+                }
+            } finally { runCatching { mic.stop() }; mic.release() }
+        } }
+    }
+    private fun heard(words: String) {
+        val now = SystemClock.elapsedRealtime()
+        val tail = WakeCommands.afterWake(words,phrase)
+        val command = when {
+            tail != null -> tail
+            now <= triggeredUntil -> words
+            else -> return
+        }
+        triggeredUntil = if (command.isBlank()) now + 10000 else 0
+        val locked = (getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager).isDeviceLocked
+        if (locked) { triggeredUntil = 0; update("Unlock your phone to give a command."); return }
+        val normalized = WakeCommands.normalize(command,phrase)
+        if (normalized.isNotBlank()) {
+            val reply = runCatching { WakeCommands.local(this,normalized) }.getOrElse { "Device action unavailable." }
+            if (reply != null) {
+                pending = null; update(reply)
+                if (speechReady) speaker?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"wake-reply")
+                return
+            }
+        }
+        if (foregroundCommand?.invoke(normalized) == true) return
+        val ticket = UUID.randomUUID().toString()
+        pending = ticket to normalized; expires = now + 60000
+        update(if (normalized.isEmpty()) "Wake phrase heard. Tap to open AITRONICS." else "Command ready. Tap to continue in AITRONICS.",ticket)
+        SystemAssistant.active?.let { assistant -> runCatching {
+            assistant.showSession(Bundle().apply { putString("wakeTicket",ticket) },0)
+        } }
+    }
+    override fun onDestroy() {
+        live = false; running = false; pending = null
+        speaker?.shutdown(); handler.removeCallbacksAndMessages(null)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        super.onDestroy()
+    }
+}

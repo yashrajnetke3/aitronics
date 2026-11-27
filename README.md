@@ -10,9 +10,11 @@ Start by typing **battery level**. **Open WhatsApp** launches an installed app b
 | Reminders | In Settings, enable reminder notifications. Type **remind me in 10 minutes to check the line**. Android power management may delay delivery. |
 | Notification summary | Grant Notification access in Settings. Type **summarize notifications** for counts by app. Use **read notifications** to review recent previews locally. |
 | Navigation | Enable AITRONICS in Accessibility settings, then type **go home**, **go back**, or **recent apps**. Screen commands operate on the active accessibility window. |
-| Wake phrase | On a supported Android 12+ device, tap Wake and say **hey aitronics, battery level**. The foreground session ends after one command or one minute. Set your own phrase in Settings. |
+| Wake phrase | Tap **Wake → Start**, grant microphone and notification access, then press Home. Say **Hey AITRONICS, battery level** or **Hey AITRONICS, turn on the flashlight**. For automatic hands-free opening on unlocked phones, use **Settings → Set default assistant for hands-free opening**. Otherwise tap the wake notification for actions requiring a screen. Stop via the notification. Force stop and reboot end the session. |
 | Offline AI | Import a compatible Android MediaPipe LLM .task model in Settings and select Offline. Import, inference speed, and available memory depend on the model and device. |
 | Cloud AI | Enter your own OpenAI API key in Settings and select Online or Auto. Cloud chat requires internet and API access. |
 | History | Turn on Save history on device to retain messages between launches. Clear conversation in Settings to remove it. Saved memories have a separate deletion command. |
 
 GitHub Actions builds the debug APK, runs Android lint, and exercises the chat interface on an Android emulator. To run locally, use JDK 21, Gradle 8.9 and Android SDK 35. Run `gradle :app:assembleDebug :app:lintDebug`, then `gradle :app:connectedDebugAndroidTest` with an Android device connected.
+
+Background recognition uses the bundled Vosk small US-English 0.15 model (Alpha Cephei, Apache-2.0). The build downloads the model archive and verifies its SHA-256. Microphone audio is processed on the phone.
