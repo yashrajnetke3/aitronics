@@ -39,7 +39,7 @@ class AssistantNotificationListener : NotificationListenerService() {
         @Volatile private var connected: AssistantNotificationListener? = null
 
         fun summary(context: Context): String {
-            val manager = context.getSystemService(NotificationManager::class.java)
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return "Notification service unavailable."
             val component = ComponentName(context, AssistantNotificationListener::class.java)
             val granted = if (android.os.Build.VERSION.SDK_INT >= 27) {
                 manager.isNotificationListenerAccessGranted(component)
@@ -87,7 +87,7 @@ object Reminders {
     private val main = Executor { runnable -> Handler(Looper.getMainLooper()).post(runnable) }
 
     internal fun notificationsEnabled(context: Context): Boolean {
-        val manager = context.getSystemService(NotificationManager::class.java)
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return false
         manager.createNotificationChannel(NotificationChannel(channelId, "Reminders", NotificationManager.IMPORTANCE_DEFAULT))
         return manager.areNotificationsEnabled() &&
             manager.getNotificationChannel(channelId)?.importance != NotificationManager.IMPORTANCE_NONE
@@ -150,7 +150,8 @@ object Reminders {
             .setContentIntent(open)
             .setAutoCancel(true)
             .build()
-        context.getSystemService(NotificationManager::class.java).notify(tag, 1, notification)
+        if (android.os.Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) throw SecurityException("Notification permission revoked")
+        requireNotNull(context.getSystemService(NotificationManager::class.java)).notify(tag, 1, notification)
     }
 }
 

@@ -15,4 +15,4 @@ Start by typing **battery level**. **Open WhatsApp** launches an installed app b
 | Cloud AI | Enter your own OpenAI API key in Settings and select Online or Auto. Cloud chat requires internet and API access. |
 | History | Turn on Save history on device to retain messages between launches. Clear conversation in Settings to remove it. Saved memories have a separate deletion command. |
 
-GitHub Actions builds the debug APK, runs Android lint, and exercises the chat interface on an Android emulator. To run locally, use JDK 17, Gradle 8.9 and Android SDK 35. Run `gradle :app:assembleDebug :app:lintDebug`, then `gradle :app:connectedDebugAndroidTest` with an Android device connected.
+GitHub Actions builds the debug APK, runs Android lint, and exercises the chat interface on an Android emulator. To run locally, use JDK 21, Gradle 8.9 and Android SDK 35. Run `gradle :app:assembleDebug :app:lintDebug`, then `gradle :app:connectedDebugAndroidTest` with an Android device connected.
