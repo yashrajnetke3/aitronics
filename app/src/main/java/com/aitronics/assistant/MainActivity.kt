@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
     private var tts: TextToSpeech? = null
     private var speechReady = false
     private val voice = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) input = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
+        if (result.resultCode == RESULT_OK) { input = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty(); send() }
     }
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -78,11 +78,33 @@ class MainActivity : ComponentActivity() {
             else -> "Local language model is not installed yet. Offline command mode supports time, date, camera, settings and dialer."
         }
     }
+    private fun deviceCommand(q: String): String? {
+        val s = q.lowercase().trim()
+        val audio = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+        if (s == "volume up" || s == "volume down" || s == "mute") {
+            audio.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, when(s) { "volume up" -> android.media.AudioManager.ADJUST_RAISE; "volume down" -> android.media.AudioManager.ADJUST_LOWER; else -> android.media.AudioManager.ADJUST_MUTE }, android.media.AudioManager.FLAG_SHOW_UI)
+            return "Media volume updated."
+        }
+        if(s == "battery level" || s == "battery status") {
+            val battery = getSystemService(android.content.Context.BATTERY_SERVICE) as android.os.BatteryManager
+            return "Battery level: "+battery.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)+" percent."
+        }
+        val action = when(s) {
+            "open wifi settings" -> android.provider.Settings.ACTION_WIFI_SETTINGS
+            "open bluetooth settings" -> android.provider.Settings.ACTION_BLUETOOTH_SETTINGS
+            "open accessibility settings" -> android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS
+            "open battery settings" -> android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS
+            else -> null
+        }
+        if(action != null) return if(launch(Intent(action))) "Opened requested settings." else "Settings unavailable."
+        return null
+    }
     private fun send() {
         val q = input.trim()
         if (q.isEmpty() || busy) return
         input = ""
         messages.add("user" to q)
+        deviceCommand(q)?.let { answer(it); return }
         val lower = q.lowercase()
         val intent = when {
             lower == "open settings" -> Intent(android.provider.Settings.ACTION_SETTINGS)
