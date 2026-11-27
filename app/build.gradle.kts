@@ -1,5 +1,6 @@
 import java.net.URI
 import java.security.MessageDigest
+import java.security.DigestInputStream
 
 plugins {
     id("com.android.application")
