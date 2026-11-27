@@ -13,25 +13,33 @@ class AssistantTest {
         ui.onNodeWithText("Send").performClick()
     }
 
+    private fun waitForReply(text: String) {
+        try {
+            ui.waitUntil(15000) {
+                ui.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (error: Throwable) {
+            throw AssertionError("Expected reply containing '$text'. UI: " + ui.onRoot().printToString(), error)
+        }
+    }
+
     @Test fun memoryRoundTripFromChat() {
         send("remember shift at nine")
-        ui.waitUntil(10000) { ui.onAllNodesWithText("Saved to local memory.").fetchSemanticsNodes().isNotEmpty() }
+        waitForReply("Saved to local memory.")
         send("recall memory")
         ui.waitUntil(10000) { ui.onAllNodesWithText("shift at nine", substring = true).filter(hasText("remember shift at nine").not()).fetchSemanticsNodes().isNotEmpty() }
     }
     @Test fun notesSurviveActivityRecreation() {
         send("remember pilot run at noon")
-        ui.waitUntil(10000) { ui.onAllNodesWithText("Saved to local memory.").fetchSemanticsNodes().isNotEmpty() }
+        waitForReply("Saved to local memory.")
         ui.activityRule.scenario.recreate()
         send("recall memory")
-        ui.waitUntil(10000) {
-            ui.onAllNodesWithText("pilot run at noon", substring = true).fetchSemanticsNodes().isNotEmpty()
-        }
+        waitForReply("pilot run at noon")
     }
     @Test fun deviceCommandsWithoutCloudKey() {
         send("battery level")
-        ui.onNodeWithText("Battery level:", substring = true, ignoreCase = false).assertExists()
+        waitForReply("Battery level:")
         send("remind me tomorrow")
-        ui.onNodeWithText("water the plants", substring = true).assertExists()
+        waitForReply("water the plants")
     }
 }

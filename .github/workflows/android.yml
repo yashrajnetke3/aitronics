@@ -37,3 +37,13 @@ jobs:
           arch: x86_64
           disable-animations: true
           script: gradle :app:connectedDebugAndroidTest
+      - name: Show failing device assertions
+        if: failure()
+        run: |
+          python3 - <<'PYTEST'
+          import pathlib
+          import xml.etree.ElementTree as ET
+          for report in pathlib.Path("app/build/outputs/androidTest-results").rglob("*.xml"):
+              for failure in ET.parse(report).iter("failure"):
+                  print((failure.text or failure.get("message", ""))[:6000])
+          PYTEST

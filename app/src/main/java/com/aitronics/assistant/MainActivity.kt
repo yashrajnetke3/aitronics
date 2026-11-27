@@ -199,6 +199,8 @@ class MainActivity : ComponentActivity() {
     private fun send() {
         val q = input.trim().replace(Regex("^hey aitronics[, ]*", RegexOption.IGNORE_CASE), "")
         if (q.isEmpty() || busy) return
+        val keyboard = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        keyboard.hideSoftInputFromWindow(window.decorView.windowToken, 0)
         input = ""
         messages.add("user" to q)
         runCatching { deviceCommand(q) }.getOrElse { "Device action unavailable or permission denied." }?.let { answer(it); return }
@@ -309,7 +311,9 @@ class MainActivity : ComponentActivity() {
                             TextButton(onClick={settings=true}) { Text("Settings") }
                         }
                         HorizontalDivider()
-                        if(messages.isEmpty()) {
+                        LazyColumn(Modifier.weight(1f).fillMaxWidth(),reverseLayout=true,verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                        if(messages.isEmpty()) item {
+                            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                             Box(Modifier.fillMaxWidth().height(170.dp),contentAlignment=androidx.compose.ui.Alignment.Center) {
                                 androidx.compose.foundation.Canvas(Modifier.size(160.dp)) {
                                     for(i in 1..5) drawCircle(Color(0xFF64E8FF).copy(alpha=0.18f+i*0.10f),radius=size.minDimension*i/12f,style=androidx.compose.ui.graphics.drawscope.Stroke(width=2f))
@@ -324,7 +328,7 @@ class MainActivity : ComponentActivity() {
                                 OutlinedButton(onClick={input="open settings";send()}) { Text("Phone settings") }
                             }
                         }
-                        LazyColumn(Modifier.weight(1f).fillMaxWidth(),reverseLayout=true,verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                            }
                             items(messages.reversed()) { item ->
                                 Card(shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=if(item.first=="user") Color(0xFF17405A) else Color(0xFF14263A))) {
                                     Column(Modifier.fillMaxWidth().padding(14.dp)) { Text(if(item.first=="user") "YOU" else "AITRONICS",color=MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.labelSmall); Text(item.second) }
