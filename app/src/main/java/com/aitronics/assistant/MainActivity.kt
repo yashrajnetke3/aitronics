@@ -86,6 +86,11 @@ class MainActivity : ComponentActivity() {
     }
     private fun deviceCommand(q: String): String? {
         val s = q.lowercase().trim().removePrefix("hey aitronics").trim().trimStart(',').trim()
+        if(s == "read screen" || s == "scroll down" || s == "scroll up") {
+            val service = AssistantAccessibility.active ?: return "Enable AITRONICS accessibility first."
+            if(s == "read screen") return service.screenText()
+            return if(service.scroll(s == "scroll down")) "Scroll accepted." else "No accessible scrolling target."
+        }
         val navigation = when(s) {
             "go back" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
             "go home" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME
