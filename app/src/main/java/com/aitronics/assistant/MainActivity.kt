@@ -107,6 +107,18 @@ class MainActivity : ComponentActivity() {
             val battery = getSystemService(android.content.Context.BATTERY_SERVICE) as android.os.BatteryManager
             return "Battery level: "+battery.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)+" percent."
         }
+        if (s == "turn on flashlight" || s == "turn off flashlight") {
+            val camera = getSystemService(android.content.Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+            val id = camera.cameraIdList.firstOrNull { camera.getCameraCharacteristics(it).get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == true } ?: return "No flashlight available."
+            camera.setTorchMode(id,s == "turn on flashlight")
+            return "Flashlight command accepted."
+        }
+        val alarm = Regex("set alarm (?:for )?(\\d{1,2}):(\\d{2})").matchEntire(s)
+        if(alarm != null) {
+            val h=alarm.groupValues[1].toInt(); val m=alarm.groupValues[2].toInt()
+            if(h !in 0..23 || m !in 0..59) return "Use a valid 24-hour time."
+            return if(launch(Intent(android.provider.AlarmClock.ACTION_SET_ALARM).putExtra(android.provider.AlarmClock.EXTRA_HOUR,h).putExtra(android.provider.AlarmClock.EXTRA_MINUTES,m))) "Opened alarm setup." else "Alarm application unavailable."
+        }
         val action = when(s) {
             "open wifi settings" -> android.provider.Settings.ACTION_WIFI_SETTINGS
             "open bluetooth settings" -> android.provider.Settings.ACTION_BLUETOOTH_SETTINGS
@@ -118,17 +130,19 @@ class MainActivity : ComponentActivity() {
         return null
     }
     private fun send() {
-        val q = input.trim()
+        val q = input.trim().replace(Regex("^hey aitronics[, ]*", RegexOption.IGNORE_CASE), "")
         if (q.isEmpty() || busy) return
         input = ""
         messages.add("user" to q)
-        deviceCommand(q)?.let { answer(it); return }
+        runCatching { deviceCommand(q) }.getOrElse { "Device action unavailable or permission denied." }?.let { answer(it); return }
         val lower = q.lowercase()
         val intent = when {
             lower == "open settings" -> Intent(android.provider.Settings.ACTION_SETTINGS)
             lower == "open camera" -> Intent(android.provider.MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
+            lower == "open contacts" -> Intent(Intent.ACTION_VIEW,android.provider.ContactsContract.Contacts.CONTENT_URI)
             lower == "open youtube" -> Intent(Intent.ACTION_VIEW,Uri.parse("https://www.youtube.com"))
             lower.startsWith("dial ") -> Intent(Intent.ACTION_DIAL,Uri.fromParts("tel",q.substring(5),null))
+            lower.startsWith("message ") -> Intent(Intent.ACTION_SENDTO,Uri.fromParts("smsto",q.substring(8),null))
             lower.startsWith("search ") -> Intent(Intent.ACTION_VIEW,Uri.parse("https://www.google.com/search?q="+Uri.encode(q.substring(7))))
             else -> null
         }
@@ -200,7 +214,7 @@ class MainActivity : ComponentActivity() {
                         if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                         OutlinedTextField(input,{input=it},modifier=Modifier.fillMaxWidth(),placeholder={Text("Ask or enter a command")},maxLines=4,shape=RoundedCornerShape(20.dp))
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                            OutlinedButton(onClick={runCatching { voice.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)) }.onFailure { answer("Speech recognition unavailable.") }}) { Text("Voice") }
+                            OutlinedButton(onClick={runCatching { voice.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM).putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,mode=="Offline")) }.onFailure { answer("Speech recognition unavailable.") }}) { Text("Voice") }
                             Button(onClick={send()},enabled=!busy,modifier=Modifier.weight(1f)) { Text("Send") }
                         }
                     }
