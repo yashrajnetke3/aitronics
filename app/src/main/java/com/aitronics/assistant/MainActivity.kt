@@ -85,7 +85,19 @@ class MainActivity : ComponentActivity() {
         }
     }
     private fun deviceCommand(q: String): String? {
-        val s = q.lowercase().trim()
+        val s = q.lowercase().trim().removePrefix("hey aitronics").trim().trimStart(',').trim()
+        val navigation = when(s) {
+            "go back" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
+            "go home" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME
+            "recent apps" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS
+            "show notifications" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS
+            "quick settings" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS
+            else -> null
+        }
+        if(navigation != null) {
+            val service = AssistantAccessibility.active ?: return "Enable AITRONICS navigation in Android accessibility settings first."
+            return if(service.performGlobalAction(navigation)) "Navigation action accepted." else "Android rejected the navigation action."
+        }
         val audio = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
         if (s == "volume up" || s == "volume down" || s == "mute") {
             audio.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, when(s) { "volume up" -> android.media.AudioManager.ADJUST_RAISE; "volume down" -> android.media.AudioManager.ADJUST_LOWER; else -> android.media.AudioManager.ADJUST_MUTE }, android.media.AudioManager.FLAG_SHOW_UI)
