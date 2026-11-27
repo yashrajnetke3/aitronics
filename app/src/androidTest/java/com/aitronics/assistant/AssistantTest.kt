@@ -17,7 +17,16 @@ class AssistantTest {
         send("remember shift at nine")
         ui.waitUntil(10000) { ui.onAllNodesWithText("Saved to local memory.").fetchSemanticsNodes().isNotEmpty() }
         send("recall memory")
-        ui.waitUntil(10000) { ui.onAllNodesWithText("shift at nine").fetchSemanticsNodes().isNotEmpty() }
+        ui.waitUntil(10000) { ui.onAllNodesWithText("shift at nine", substring = true).filter(hasText("remember shift at nine").not()).fetchSemanticsNodes().isNotEmpty() }
+    }
+    @Test fun notesSurviveActivityRecreation() {
+        send("remember pilot run at noon")
+        ui.waitUntil(10000) { ui.onAllNodesWithText("Saved to local memory.").fetchSemanticsNodes().isNotEmpty() }
+        ui.activityRule.scenario.recreate()
+        send("recall memory")
+        ui.waitUntil(10000) {
+            ui.onAllNodesWithText("pilot run at noon", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
     }
     @Test fun deviceCommandsWithoutCloudKey() {
         send("battery level")

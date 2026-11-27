@@ -214,7 +214,15 @@ class MainActivity : ComponentActivity() {
                 .setPositiveButton("Delete") { _, _ -> memory { it.clear(); "Memories deleted." } }.show()
             return
         }
-        if (lower in listOf("summarize notifications", "read notifications")) { answer(AssistantNotificationListener.summary(this)); return }
+        if (lower == "read notifications") {
+            android.app.AlertDialog.Builder(this).setMessage("Show up to eight recent notification previews on this phone?")
+                .setNegativeButton("Cancel", null).setPositiveButton("Show") { _,_ ->
+                    android.app.AlertDialog.Builder(this).setTitle("Notification previews")
+                        .setMessage(AssistantNotificationListener.previews(this)).setPositiveButton("Close",null).show()
+                }.show()
+            return
+        }
+        if (lower == "summarize notifications") { answer(AssistantNotificationListener.summary(this)); return }
         if (Reminders.handle(this, q) { reply -> if (!isDestroyed) answer(reply) }) return
         val intent = when {
             lower == "open settings" -> Intent(android.provider.Settings.ACTION_SETTINGS)
@@ -346,7 +354,7 @@ class MainActivity : ComponentActivity() {
                             }
                             Text("Built-in commands work offline. For offline chat, import a compatible MediaPipe LLM .task model. Cloud AI uses your own API key.")
                             TextButton(enabled=!busy,onClick={chooseModel.launch(arrayOf("*/*"))}) { Text("Import offline model") }
-                            if (LocalModel.installed(this)) TextButton(enabled=!busy,onClick={
+                            if (LocalModel.installed(this@MainActivity)) TextButton(enabled=!busy,onClick={
                                 android.app.AlertDialog.Builder(this@MainActivity).setMessage("Delete the imported offline model?")
                                     .setNegativeButton("Cancel",null).setPositiveButton("Delete") { _,_ ->
                                         busy=true; settings=false

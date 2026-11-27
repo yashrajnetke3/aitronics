@@ -38,6 +38,27 @@ class AssistantNotificationListener : NotificationListenerService() {
     companion object {
         @Volatile private var connected: AssistantNotificationListener? = null
 
+        fun previews(context: Context): String {
+            val lock = context.getSystemService(android.app.KeyguardManager::class.java)
+            if (lock == null || lock.isDeviceLocked) return "Unlock the phone to read notifications."
+            val service = connected ?: return "Enable notification access in Android settings."
+            val items = try {
+                service.activeNotifications.orEmpty().filter {
+                    it.notification.visibility != Notification.VISIBILITY_SECRET &&
+                        it.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0
+                }.sortedByDescending { it.postTime }
+            } catch (_: SecurityException) {
+                return "Notification access was revoked."
+            }
+            val previews = items.take(8).mapNotNull { item ->
+                val extras = item.notification.extras
+                val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+                val body = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+                listOfNotNull(title, body).filter { it.isNotBlank() }.distinct().joinToString(" — ").take(240).ifEmpty { null }
+            }
+            return previews.joinToString("\n\n").ifBlank { "There are no readable notification previews." }
+        }
+
         fun summary(context: Context): String {
             val manager = context.getSystemService(NotificationManager::class.java) ?: return "Notification service unavailable."
             val component = ComponentName(context, AssistantNotificationListener::class.java)

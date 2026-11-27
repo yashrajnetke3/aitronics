@@ -8,7 +8,7 @@ Start by typing **battery level**. **Open WhatsApp** launches an installed app b
 | --- | --- |
 | Local notes | Type **remember my shift starts at nine**, **recall memory**, or **forget all memories**. |
 | Reminders | In Settings, enable reminder notifications. Type **remind me in 10 minutes to check the line**. Android power management may delay delivery. |
-| Notification summary | Grant Notification access in Settings. Type **summarize notifications** for counts by app. |
+| Notification summary | Grant Notification access in Settings. Type **summarize notifications** for counts by app. Use **read notifications** to review recent previews locally. |
 | Navigation | Enable AITRONICS in Accessibility settings, then type **go home**, **go back**, or **recent apps**. Screen commands operate on the active accessibility window. |
 | Wake phrase | On a supported Android 12+ device, tap Wake and say **hey aitronics, battery level**. The foreground session ends after one command or one minute. Set your own phrase in Settings. |
 | Offline AI | Import a compatible Android MediaPipe LLM .task model in Settings and select Offline. Import, inference speed, and available memory depend on the model and device. |
