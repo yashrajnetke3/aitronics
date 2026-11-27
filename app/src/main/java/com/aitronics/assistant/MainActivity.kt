@@ -12,6 +12,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,6 +46,48 @@ class MainActivity : ComponentActivity() {
     private val voice = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) { input = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty(); send() }
     }
+    private var wakePhrase by mutableStateOf("hey aitronics")
+    private var listening by mutableStateOf(false)
+    private var wakeRequested = false
+    private val cloudHistory = mutableListOf<Pair<String,String>>()
+    private var saveHistory by mutableStateOf(false)
+    private lateinit var localVoice: LocalVoice
+    private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startLocalVoice() else answer("Microphone permission is needed for on-device voice.")
+    }
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        answer(if (granted) "Reminder notifications enabled. Enter your reminder command." else "Reminder notifications are disabled.")
+    }
+    private fun startLocalVoice() {
+        listening = true
+        runCatching { localVoice.start(if (wakeRequested) wakePhrase else null) }
+            .onFailure { localVoice.stop(); listening = false; answer("Could not start on-device voice.") }
+    }
+    private fun listen(wake: Boolean) {
+        if (listening) { localVoice.stop(); listening = false; return }
+        if (!wake && mode == "Online") {
+            runCatching { voice.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)) }
+                .onFailure { answer("Speech recognition unavailable.") }
+            return
+        }
+        wakeRequested = wake
+        micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+    }
+    private fun memory(action: (MemoryDao) -> String) {
+        busy = true
+        MemoryDatabase.executor.execute {
+            val reply = runCatching { action(MemoryDatabase.get(applicationContext).notes()) }.getOrDefault("Could not access local memory.")
+            runOnUiThread { busy = false; if (!isDestroyed) answer(reply) }
+        }
+    }
+    private val chooseModel = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            busy = true
+            settings = false
+            LocalModel.importModel(this, uri) { reply -> busy = false; if (!isDestroyed) answer(reply) }
+        }
+    }
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey("aitronics_api", null) as? SecretKey)?.let { return it }
@@ -64,6 +108,7 @@ class MainActivity : ComponentActivity() {
         String(cipher.doFinal(data.copyOfRange(12,data.size)))
     }.getOrDefault("")
     private fun persistHistory() {
+        if (!saveHistory) return
         val array = JSONArray()
         messages.takeLast(100).forEach { array.put(JSONObject().put("role",it.first).put("text",it.second)) }
         getPreferences(MODE_PRIVATE).edit().putString("history",array.toString()).apply()
@@ -88,8 +133,25 @@ class MainActivity : ComponentActivity() {
         val s = q.lowercase().trim().removePrefix("hey aitronics").trim().trimStart(',').trim()
         if(s == "read screen" || s == "scroll down" || s == "scroll up") {
             val service = AssistantAccessibility.active ?: return "Enable AITRONICS accessibility first."
-            if(s == "read screen") return service.screenText()
-            return if(service.scroll(s == "scroll down")) "Scroll accepted." else "No accessible scrolling target."
+            android.app.AlertDialog.Builder(this).setMessage("Switch back to the previous app and run “$s” on that screen?")
+                .setNegativeButton("Cancel",null).setPositiveButton("Continue") { _,_ ->
+                    if (!moveTaskToBack(true)) {
+                        answer("Android could not switch apps.")
+                    } else android.os.Handler(mainLooper).postDelayed({
+                        if (!isDestroyed) {
+                            val locked = (getSystemService(KEYGUARD_SERVICE) as android.app.KeyguardManager).isDeviceLocked
+                            val reply = when {
+                                locked -> "Unlock your phone to use screen commands."
+                                AssistantAccessibility.active !== service -> "Accessibility disconnected."
+                                s == "read screen" -> service.screenText()
+                                service.scroll(s == "scroll down") -> "Scroll accepted."
+                                else -> "No accessible scrolling target."
+                            }
+                            answer(reply)
+                        }
+                    }, 900L)
+                }.show()
+            return "Review the screen action."
         }
         val navigation = when(s) {
             "go back" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
@@ -141,21 +203,48 @@ class MainActivity : ComponentActivity() {
         messages.add("user" to q)
         runCatching { deviceCommand(q) }.getOrElse { "Device action unavailable or permission denied." }?.let { answer(it); return }
         val lower = q.lowercase()
+        if (lower == "help") {
+            answer("Try open WhatsApp, battery level, volume up, read screen, scroll down, dial 12345, message 12345, summarize notifications, remember my shift starts at nine, recall memory, or remind me in 10 minutes to check the line.")
+            return
+        }
+        if (lower.startsWith("remember ")) { memory { it.add(Memory(note=q.substringAfter(' ').take(4000))); "Saved to local memory." }; return }
+        if (lower == "recall memory") { memory { it.recent().joinToString("\n").ifBlank { "No saved memories." } }; return }
+        if (lower == "forget all memories") {
+            android.app.AlertDialog.Builder(this).setMessage("Delete all saved memories?").setNegativeButton("Cancel",null)
+                .setPositiveButton("Delete") { _, _ -> memory { it.clear(); "Memories deleted." } }.show()
+            return
+        }
+        if (lower in listOf("summarize notifications", "read notifications")) { answer(AssistantNotificationListener.summary(this)); return }
+        if (Reminders.handle(this, q) { reply -> if (!isDestroyed) answer(reply) }) return
         val intent = when {
             lower == "open settings" -> Intent(android.provider.Settings.ACTION_SETTINGS)
             lower == "open camera" -> Intent(android.provider.MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
             lower == "open contacts" -> Intent(Intent.ACTION_VIEW,android.provider.ContactsContract.Contacts.CONTENT_URI)
             lower == "open youtube" -> Intent(Intent.ACTION_VIEW,Uri.parse("https://www.youtube.com"))
             lower.startsWith("dial ") -> Intent(Intent.ACTION_DIAL,Uri.fromParts("tel",q.substring(5),null))
-            lower.startsWith("message ") -> Intent(Intent.ACTION_SENDTO,Uri.fromParts("smsto",q.substring(8),null))
+            lower.startsWith("message ") -> {
+                val message = q.substring(8).trim()
+                val split = Regex("""\s+saying\s+""", RegexOption.IGNORE_CASE).split(message, limit=2)
+                Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto",split.first(),null)).apply {
+                    if (split.size == 2) putExtra("sms_body",split[1])
+                }
+            }
             lower.startsWith("search ") -> Intent(Intent.ACTION_VIEW,Uri.parse("https://www.google.com/search?q="+Uri.encode(q.substring(7))))
             else -> null
         }
         if (intent != null) { answer(if(launch(intent)) "Opened requested action." else "No compatible application found."); return }
-        if (mode == "Offline" || (mode == "Auto" && apiKey.isBlank())) { answer(offline(q)); return }
+        if (lower.startsWith("open ")) { answer(runCatching { openInstalledApp(this, q.substringAfter(' ')) }.getOrDefault("App could not be opened.")); return }
+        if (mode == "Offline" || (mode == "Auto" && apiKey.isBlank())) {
+            val local = offline(q)
+            if (local.startsWith("Local language model") && LocalModel.installed(this)) {
+                busy = true
+                LocalModel.generate(this, q) { reply -> busy = false; if (!isDestroyed) answer(reply) }
+            } else answer(local)
+            return
+        }
         if (apiKey.isBlank()) { answer("Online mode requires an API key. Choose Auto or Offline in Settings."); return }
         val secret = apiKey
-        val history = messages.takeLast(20).toList()
+        val history = cloudHistory.takeLast(18) + listOf("user" to q)
         busy = true
         Thread {
             var connection: HttpsURLConnection? = null
@@ -176,11 +265,29 @@ class MainActivity : ComponentActivity() {
                 else "AI request failed (HTTP "+status+"). Check your API key, billing or rate limits."
             } catch(e: Exception) { "Connection failed. Check internet access and try again." }
             finally { connection?.disconnect() }
-            runOnUiThread { busy = false; answer(if(mode == "Auto" && (result.startsWith("Connection failed") || result.startsWith("AI request failed"))) offline(q) else result) }
+            runOnUiThread {
+                if (!isDestroyed) {
+                    busy = false
+                    if (!result.startsWith("Connection failed") && !result.startsWith("AI request failed")) {
+                        cloudHistory.clear()
+                        cloudHistory.addAll(history + listOf("assistant" to result))
+                    }
+                    answer(result)
+                }
+            }
         }.start()
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val prefs = getPreferences(MODE_PRIVATE)
+        speak = prefs.getBoolean("speak",true)
+        saveHistory = prefs.getBoolean("saveHistory", prefs.contains("history"))
+        wakePhrase = prefs.getString("wakePhrase","hey aitronics") ?: "hey aitronics"
+        localVoice = LocalVoice(this) { command, status ->
+            listening = false
+            if (!command.isNullOrBlank()) { input = command; send() }
+            else if (status != null) answer(status)
+        }
         apiKey = loadKey()
         runCatching { val a = JSONArray(getPreferences(MODE_PRIVATE).getString("history","[]")); for(i in 0 until a.length()) { val m=a.getJSONObject(i); messages.add(m.getString("role") to m.getString("text")) } }
         mode = getPreferences(MODE_PRIVATE).getString("mode","Auto") ?: "Auto"
@@ -216,10 +323,12 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
+                        if(listening) Text(if(wakeRequested) "Listening for “$wakePhrase” followed by a command" else "Listening…")
                         if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                         OutlinedTextField(input,{input=it},modifier=Modifier.fillMaxWidth(),placeholder={Text("Ask or enter a command")},maxLines=4,shape=RoundedCornerShape(20.dp))
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                            OutlinedButton(onClick={runCatching { voice.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM).putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,mode=="Offline")) }.onFailure { answer("Speech recognition unavailable.") }}) { Text("Voice") }
+                            OutlinedButton(onClick={listen(false)},enabled=!busy) { Text(if(listening) "Stop" else "Voice") }
+                            if (!listening) TextButton(onClick={listen(true)},enabled=!busy) { Text("Wake") }
                             Button(onClick={send()},enabled=!busy,modifier=Modifier.weight(1f)) { Text("Send") }
                         }
                     }
@@ -228,23 +337,38 @@ class MainActivity : ComponentActivity() {
                     var draft by remember { mutableStateOf(apiKey) }
                     var error by remember { mutableStateOf(false) }
                     AlertDialog(onDismissRequest={settings=false},title={Text("Assistant settings")},text={
-                        Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                             Text("Assistant mode")
                             Row(horizontalArrangement=Arrangement.spacedBy(4.dp)) {
                                 listOf("Auto","Offline","Online").forEach { option ->
                                     FilterChip(selected=mode==option,onClick={mode=option;getPreferences(MODE_PRIVATE).edit().putString("mode",option).apply()},label={Text(option)})
                                 }
                             }
-                            Text("Offline currently supports built-in commands. Cloud AI is optional and billed separately.")
+                            Text("Built-in commands work offline. For offline chat, import a compatible MediaPipe LLM .task model. Cloud AI uses your own API key.")
+                            TextButton(enabled=!busy,onClick={chooseModel.launch(arrayOf("*/*"))}) { Text("Import offline model") }
+                            if (LocalModel.installed(this)) TextButton(enabled=!busy,onClick={
+                                android.app.AlertDialog.Builder(this@MainActivity).setMessage("Delete the imported offline model?")
+                                    .setNegativeButton("Cancel",null).setPositiveButton("Delete") { _,_ ->
+                                        busy=true; settings=false
+                                        LocalModel.delete(this@MainActivity) { reply -> busy=false; if (!isDestroyed) answer(reply) }
+                                    }.show()
+                            }) { Text("Delete offline model") }
                             OutlinedTextField(draft,{draft=it},label={Text("OpenAI API key")},visualTransformation=PasswordVisualTransformation(),singleLine=true)
-                            Row { Switch(checked=speak,onCheckedChange={speak=it}); Text(" Spoken replies",Modifier.padding(top=12.dp)) }
-                            TextButton(onClick={messages.clear(); persistHistory()}) { Text("Clear conversation") }
+                            Row { Switch(checked=speak,onCheckedChange={speak=it;getPreferences(MODE_PRIVATE).edit().putBoolean("speak",it).apply()}); Text(" Spoken replies",Modifier.padding(top=12.dp)) }
+                            OutlinedTextField(wakePhrase,{wakePhrase=it.take(48)},label={Text("Wake phrase")},singleLine=true)
+                            Row { Switch(checked=saveHistory,onCheckedChange={saveHistory=it;getPreferences(MODE_PRIVATE).edit().putBoolean("saveHistory",it).remove("history").apply();persistHistory()}); Text(" Save history on device") }
+                            TextButton(onClick={launch(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))}) { Text("Notification access") }
+                            TextButton(onClick={launch(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))}) { Text("Accessibility settings") }
+                            TextButton(onClick={if(android.os.Build.VERSION.SDK_INT>=33) notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else launch(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE,packageName))}) { Text("Reminder permissions") }
+                            TextButton(onClick={messages.clear(); cloudHistory.clear();persistHistory()}) { Text("Clear conversation") }
                             if(error) Text("Unable to save key securely.")
                         }
-                    },confirmButton={Button(onClick={runCatching { saveKey(draft.trim());apiKey=draft.trim();settings=false }.onFailure { error=true }}) { Text("Save") }},dismissButton={TextButton(onClick={settings=false}) { Text("Cancel") }})
+                    },confirmButton={Button(onClick={runCatching { wakePhrase=wakePhrase.trim().ifBlank { "hey aitronics" };getPreferences(MODE_PRIVATE).edit().putString("wakePhrase",wakePhrase).apply();saveKey(draft.trim());apiKey=draft.trim();settings=false }.onFailure { error=true }}) { Text("Save") }},dismissButton={TextButton(onClick={settings=false}) { Text("Cancel") }})
                 }
             }
         }
     }
+    override fun onStop() { localVoice.stop(); listening=false; super.onStop() }
     override fun onDestroy() { tts?.shutdown(); super.onDestroy() }
 }
+
