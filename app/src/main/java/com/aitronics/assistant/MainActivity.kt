@@ -36,6 +36,7 @@ class MainActivity : ComponentActivity() {
     private var apiKey by mutableStateOf("")
     private var settings by mutableStateOf(false)
     private var busy by mutableStateOf(false)
+    private var mode by mutableStateOf("Auto")
     private var speak by mutableStateOf(true)
     private val messages = mutableStateListOf<Pair<String,String>>()
     private var tts: TextToSpeech? = null
@@ -67,6 +68,16 @@ class MainActivity : ComponentActivity() {
         if (speak && speechReady) tts?.speak(value,TextToSpeech.QUEUE_FLUSH,null,"answer")
     }
     private fun launch(intent: Intent): Boolean = runCatching { startActivity(intent); true }.getOrDefault(false)
+    private fun offline(q: String): String {
+        val s = q.trim().lowercase()
+        return when {
+            s in listOf("hello","hi","hey") -> "Hello! AITRONICS is ready in offline command mode."
+            s == "what time is it" || s == "time" -> java.text.DateFormat.getTimeInstance().format(java.util.Date())
+            s == "date" || s == "what is the date" -> java.text.DateFormat.getDateInstance().format(java.util.Date())
+            s == "help" -> "Offline commands: open camera, open settings, dial a number, time, date. Web search and YouTube need internet."
+            else -> "Local language model is not installed yet. Offline command mode supports time, date, camera, settings and dialer."
+        }
+    }
     private fun send() {
         val q = input.trim()
         if (q.isEmpty() || busy) return
@@ -82,7 +93,8 @@ class MainActivity : ComponentActivity() {
             else -> null
         }
         if (intent != null) { answer(if(launch(intent)) "Opened requested action." else "No compatible application found."); return }
-        if (apiKey.isBlank()) { answer("Add your OpenAI API key in Settings to enable AI conversations. Offline commands: open settings, open camera, open YouTube, dial a number, or search a topic."); return }
+        if (mode == "Offline" || (mode == "Auto" && apiKey.isBlank())) { answer(offline(q)); return }
+        if (apiKey.isBlank()) { answer("Online mode requires an API key. Choose Auto or Offline in Settings."); return }
         val secret = apiKey
         val history = messages.takeLast(20).toList()
         busy = true
@@ -105,19 +117,20 @@ class MainActivity : ComponentActivity() {
                 else "AI request failed (HTTP "+status+"). Check your API key, billing or rate limits."
             } catch(e: Exception) { "Connection failed. Check internet access and try again." }
             finally { connection?.disconnect() }
-            runOnUiThread { busy = false; answer(result) }
+            runOnUiThread { busy = false; answer(if(mode == "Auto" && (result.startsWith("Connection failed") || result.startsWith("AI request failed"))) offline(q) else result) }
         }.start()
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         apiKey = loadKey()
+        mode = getPreferences(MODE_PRIVATE).getString("mode","Auto") ?: "Auto"
         tts = TextToSpeech(this) { speechReady = it == TextToSpeech.SUCCESS }
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(primary=Color(0xFF64E8FF),background=Color(0xFF08111F),surface=Color(0xFF101E30),onSurface=Color(0xFFE5F5FF))) {
                 Surface(Modifier.fillMaxSize(),color=MaterialTheme.colorScheme.background) {
                     Column(Modifier.safeDrawingPadding().imePadding().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-                            Column { Text("AITRONICS",style=MaterialTheme.typography.headlineMedium,color=MaterialTheme.colorScheme.primary); Text(if(apiKey.isBlank()) "OFFLINE COMMANDS" else "AI CONFIGURED",style=MaterialTheme.typography.labelSmall) }
+                            Column { Text("AITRONICS",style=MaterialTheme.typography.headlineMedium,color=MaterialTheme.colorScheme.primary); Text(mode.uppercase() + if(apiKey.isBlank()) " · NO CLOUD KEY" else " · CLOUD CONFIGURED",style=MaterialTheme.typography.labelSmall) }
                             TextButton(onClick={settings=true}) { Text("Settings") }
                         }
                         HorizontalDivider()
@@ -149,7 +162,13 @@ class MainActivity : ComponentActivity() {
                     var error by remember { mutableStateOf(false) }
                     AlertDialog(onDismissRequest={settings=false},title={Text("Assistant settings")},text={
                         Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                            Text("Your API key is stored encrypted on this device. API usage is billed separately.")
+                            Text("Assistant mode")
+                            Row(horizontalArrangement=Arrangement.spacedBy(4.dp)) {
+                                listOf("Auto","Offline","Online").forEach { option ->
+                                    FilterChip(selected=mode==option,onClick={mode=option;getPreferences(MODE_PRIVATE).edit().putString("mode",option).apply()},label={Text(option)})
+                                }
+                            }
+                            Text("Offline currently supports built-in commands. Cloud AI is optional and billed separately.")
                             OutlinedTextField(draft,{draft=it},label={Text("OpenAI API key")},visualTransformation=PasswordVisualTransformation(),singleLine=true)
                             Row { Switch(checked=speak,onCheckedChange={speak=it}); Text(" Spoken replies",Modifier.padding(top=12.dp)) }
                             TextButton(onClick={messages.clear()}) { Text("Clear conversation") }
