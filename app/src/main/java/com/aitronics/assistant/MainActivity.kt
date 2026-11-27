@@ -63,8 +63,14 @@ class MainActivity : ComponentActivity() {
         cipher.init(Cipher.DECRYPT_MODE,key(),GCMParameterSpec(128,data.copyOfRange(0,12)))
         String(cipher.doFinal(data.copyOfRange(12,data.size)))
     }.getOrDefault("")
+    private fun persistHistory() {
+        val array = JSONArray()
+        messages.takeLast(100).forEach { array.put(JSONObject().put("role",it.first).put("text",it.second)) }
+        getPreferences(MODE_PRIVATE).edit().putString("history",array.toString()).apply()
+    }
     private fun answer(value: String) {
         messages.add("assistant" to value)
+        persistHistory()
         if (speak && speechReady) tts?.speak(value,TextToSpeech.QUEUE_FLUSH,null,"answer")
     }
     private fun launch(intent: Intent): Boolean = runCatching { startActivity(intent); true }.getOrDefault(false)
@@ -145,6 +151,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         apiKey = loadKey()
+        runCatching { val a = JSONArray(getPreferences(MODE_PRIVATE).getString("history","[]")); for(i in 0 until a.length()) { val m=a.getJSONObject(i); messages.add(m.getString("role") to m.getString("text")) } }
         mode = getPreferences(MODE_PRIVATE).getString("mode","Auto") ?: "Auto"
         tts = TextToSpeech(this) { speechReady = it == TextToSpeech.SUCCESS }
         setContent {
@@ -157,6 +164,13 @@ class MainActivity : ComponentActivity() {
                         }
                         HorizontalDivider()
                         if(messages.isEmpty()) {
+                            Box(Modifier.fillMaxWidth().height(170.dp),contentAlignment=androidx.compose.ui.Alignment.Center) {
+                                androidx.compose.foundation.Canvas(Modifier.size(160.dp)) {
+                                    for(i in 1..5) drawCircle(Color(0xFF64E8FF).copy(alpha=0.18f+i*0.10f),radius=size.minDimension*i/12f,style=androidx.compose.ui.graphics.drawscope.Stroke(width=2f))
+                                    drawCircle(Color(0xFF176D91),radius=size.minDimension/5f)
+                                }
+                                Text("AI",color=Color.White,style=MaterialTheme.typography.headlineLarge)
+                            }
                             Text("How can I help?",style=MaterialTheme.typography.headlineSmall)
                             Text("Ask a question or control supported phone functions.")
                             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -193,7 +207,7 @@ class MainActivity : ComponentActivity() {
                             Text("Offline currently supports built-in commands. Cloud AI is optional and billed separately.")
                             OutlinedTextField(draft,{draft=it},label={Text("OpenAI API key")},visualTransformation=PasswordVisualTransformation(),singleLine=true)
                             Row { Switch(checked=speak,onCheckedChange={speak=it}); Text(" Spoken replies",Modifier.padding(top=12.dp)) }
-                            TextButton(onClick={messages.clear()}) { Text("Clear conversation") }
+                            TextButton(onClick={messages.clear(); persistHistory()}) { Text("Clear conversation") }
                             if(error) Text("Unable to save key securely.")
                         }
                     },confirmButton={Button(onClick={runCatching { saveKey(draft.trim());apiKey=draft.trim();settings=false }.onFailure { error=true }}) { Text("Save") }},dismissButton={TextButton(onClick={settings=false}) { Text("Cancel") }})
