@@ -175,9 +175,16 @@ class MainActivity : ComponentActivity() {
     private fun answer(value: String) {
         messages.add("assistant" to value)
         persistHistory()
-        if (speak && speechReady) tts?.speak(value,TextToSpeech.QUEUE_FLUSH,null,"answer")
+        if (speak && speechReady) tts?.speak(value.substringBefore("\n\nhttps://en.wikipedia.org/"),TextToSpeech.QUEUE_FLUSH,null,"answer")
     }
     private fun launch(intent: Intent): Boolean = runCatching { startActivity(intent); true }.getOrDefault(false)
+    private fun lookUp(topic: String) {
+        busy=true
+        Thread {
+            val reply=runCatching { TopicLookup.fetch(topic) }.getOrDefault("Wikipedia is unavailable. Check your connection and try again.")
+            runOnUiThread { busy=false; if(!isDestroyed) answer(reply) }
+        }.start()
+    }
     private fun askLocal(q: String) {
         busy=true
         LocalModel.generate(this,q) { reply ->
@@ -295,7 +302,7 @@ class MainActivity : ComponentActivity() {
             if (LocalModel.installed(this)) askLocal(q)
             else {
                 pendingQuestion=q
-                answer("I can answer this on your phone after a one-time AI download. Tap Download & answer below, or add your OpenAI API key in Settings.")
+                answer("For general chat, tap Download & answer for a one-time AI download, or add an OpenAI API key in Settings.")
             }
             return
         }
@@ -381,7 +388,10 @@ class MainActivity : ComponentActivity() {
                         if(LocalModel.downloading) {
                             Text(if(LocalModel.progress < 100) "Downloading offline AI · ${LocalModel.progress}%" else "Preparing the answer model…")
                             if(LocalModel.progress < 100) TextButton(onClick={LocalModel.cancelDownload()}) { Text("Cancel download") }
-                        } else if(pendingQuestion.isNotBlank()) {
+                        } else if(pendingQuestion.isNotBlank() && !busy) {
+                            if(mode!="Offline") TopicLookup.topic(pendingQuestion)?.let { topic ->
+                                TextButton(onClick={lookUp(topic)}) { Text("Look up on Wikipedia") }
+                            }
                             Button(onClick={LocalModel.download(this@MainActivity)}) { Text("Download & answer · 547 MB") }
                         }
                         if(busy) { Text("Working on your reply…",color=Muted); LinearProgressIndicator(Modifier.fillMaxWidth()) }

@@ -30,3 +30,5 @@ The bubble is on by default. While hands-free listening runs, the pinned bubble 
 ### Answering questions on a fresh installation
 
 Greetings, basic arithmetic and device commands work immediately. For general questions, type or speak your question, then select **Download & answer** (547 MB). AITRONICS verifies the pinned Qwen2.5 0.5B model before activating it, then answers the pending question locally. Keep the app open until setup finishes. A compatible imported model or an OpenAI key in Settings also enables chat. Voice input can use the active hands-free microphone without waiting for a wake word.
+
+In Auto or Online mode, topic questions such as “What is photosynthesis?” also offer **Look up on Wikipedia**. This sends the topic to English Wikipedia only when selected and returns the article excerpt and source URL.
