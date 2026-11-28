@@ -83,6 +83,9 @@ class AssistantTest {
         for (q in listOf("close camera","scroll down","open chat with Sam","write message Good morning","read draft","send message","confirm send"))
             org.junit.Assert.assertTrue(ScreenCommands.handles(q))
         org.junit.Assert.assertFalse(ScreenCommands.handles("message 12345 saying Hi"))
+        org.junit.Assert.assertEquals("scroll down in WhatsApp",WakeCommands.normalize("whatapp scroll dow","hey aitronics"))
+        org.junit.Assert.assertTrue(ScreenCommands.followUp("close camera"))
+        org.junit.Assert.assertFalse(ScreenCommands.followUp("confirm send"))
     }
 
     @Test fun deviceCommandsWithoutCloudKey() {

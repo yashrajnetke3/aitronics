@@ -13,12 +13,18 @@ object ScreenCommands {
     private val namedMessage = Regex("""(?:write (?:a )?(?:message|massage) to|message) (.+?) saying (.+)""",RegexOption.IGNORE_CASE)
     private val openChat = Regex("""open (?:chat with|conversation with) (.+)""",RegexOption.IGNORE_CASE)
     private val draft = Regex("""(?:write|type|draft|dictate) (?:a |the )?(?:message|massage)(?: saying| that says)?[ :,]+(.+)""",RegexOption.IGNORE_CASE)
+    private val scopedScroll = Regex("""scroll (down|up) in (WhatsApp|Telegram)""", RegexOption.IGNORE_CASE)
     private val closeApp = Regex("""(?:close|exit|leave) (?:the |this )?(.+)""",RegexOption.IGNORE_CASE)
     private data class SendReview(val pkg: String,val title: String,val text: String,val expiry: Long)
     private var review: SendReview? = null
 
-    fun handles(text: String) = text.lowercase() in setOf("scroll up","scroll down","read draft","send message","confirm send","cancel send") ||
-        closeApp.matches(text) || namedMessage.matches(text) && !text.substringAfter("message ", "").substringBefore(" saying").matches(Regex("""[+0-9 -]+""")) || draft.matches(text) || openChat.matches(text)
+    fun handles(text: String): Boolean {
+        val recipient = namedMessage.matchEntire(text)?.groupValues?.get(1)
+        val namedChat = recipient != null && !recipient.matches(Regex("""[+0-9 ()-]+"""))
+        return text.lowercase() in setOf("scroll up","scroll down","read draft","send message","confirm send","cancel send") ||
+            scopedScroll.matches(text) || closeApp.matches(text) || namedChat || draft.matches(text) || openChat.matches(text)
+    }
+    fun followUp(text: String) = handles(text) && text.lowercase() !in setOf("send message","confirm send")
     private fun nodes(root: Node): List<Node> {
         val result = mutableListOf<Node>()
         val queue = ArrayDeque<Node>(); queue.add(root)
@@ -53,13 +59,21 @@ object ScreenCommands {
             review = null
             return if (service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)) "Returned to Home." else "Android could not leave the app."
         }
-        if (key.startsWith("scroll ")) return if(service.scroll(key=="scroll down")) "Scrolled." else "No accessible scrolling target."
+        if (key.startsWith("scroll ")) {
+            val target = scopedScroll.matchEntire(command)?.groupValues?.get(2)
+            if (target != null) {
+                val correct = pkg in messaging && (target.equals("WhatsApp",true) == pkg.startsWith("com.whatsapp"))
+                if(!correct) return "Open $target first."
+            }
+            return if(service.scroll(key.startsWith("scroll down"))) "Scrolled." else "No accessible scrolling target."
+        }
         if(pkg !in messaging) return "Open WhatsApp or Telegram first."
         val all = nodes(root)
         val chat = openChat.matchEntire(command)
         if (chat != null) {
             review = null
             val target = chat.groupValues[1].trim()
+            if (all.any { it.isEditable && id(it) in setOf("entry","message_edit_text","chat_input") }) return "Go to the chat list first."
             val matches = all.filter { it.text?.toString()?.equals(target,true) == true }
             if(matches.size != 1) return "Choose the chat named $target on screen."
             var row: Node? = matches.single()

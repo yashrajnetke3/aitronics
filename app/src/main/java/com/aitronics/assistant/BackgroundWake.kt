@@ -56,6 +56,7 @@ class BackgroundWake : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     @Volatile private var live = false
+    private var followUntil = 0L
     private var triggeredUntil = 0L
     private var phrase = "hey aitronics"
     private var speaker: TextToSpeech? = null
@@ -163,12 +164,14 @@ class BackgroundWake : Service() {
         val command = when {
             tail != null -> tail
             now <= triggeredUntil -> words
+            now <= followUntil && ScreenCommands.followUp(WakeCommands.normalize(words,phrase)) -> words
             else -> return
         }
         triggeredUntil = if (command.isBlank()) now + 10000 else 0
         val locked = (getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager).isDeviceLocked
-        if (locked) { triggeredUntil = 0; update("Unlock your phone to give a command."); return }
+        if (locked) { triggeredUntil = 0; followUntil = 0; update("Unlock your phone to give a command."); return }
         val normalized = WakeCommands.normalize(command,phrase)
+        followUntil = if (normalized.startsWith("open ",true) || ScreenCommands.handles(normalized)) now + 15000 else 0
         if (normalized.isNotBlank()) {
             val screenAction = ScreenCommands.handles(normalized) && foregroundCommand == null
             val reply = runCatching {

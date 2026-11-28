@@ -24,6 +24,12 @@ object WakeCommands {
     fun normalize(text: String, phrase: String): String {
         var s = afterWake(text, phrase) ?: text.trim()
         s = s.replace(Regex("""^(?:(?:hey|hay|electronics)[ ,]+)(?=(?:open|turn|switch|close|start)\b)""",RegexOption.IGNORE_CASE), "").trimEnd('.', '!', '?')
+        val scopedScroll = Regex("""(whatapp|whats ?app|telegram|teligaram)\s+(scroll (?:down|dow|up))""",RegexOption.IGNORE_CASE).matchEntire(s)
+        if (scopedScroll != null) {
+            val app = if(scopedScroll.groupValues[1].startsWith("w",true)) "WhatsApp" else "Telegram"
+            val direction = if(scopedScroll.groupValues[2].endsWith("up",true)) "up" else "down"
+            return "scroll $direction in $app"
+        }
         val light = Regex("""(?:please )?(open|close|switch on|turn on|switch off|turn off) (?:the |my )?(?:flashlight|flash light|light|torch)(?: please)?""",RegexOption.IGNORE_CASE).matchEntire(s)
         if (light != null) return if (light.groupValues[1].lowercase() in listOf("open","switch on","turn on")) "turn on flashlight" else "turn off flashlight"
         return when(s.lowercase()) {
