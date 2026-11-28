@@ -311,7 +311,7 @@ class MainActivity : ComponentActivity() {
         if (intent != null) { answer(if(launch(intent)) "Opened requested action." else "No compatible application found."); return }
         if (lower.startsWith("open ")) { answer(runCatching { openInstalledApp(this, q.substringAfter(' ')) }.getOrDefault("App could not be opened.")); return }
         QuickAnswers.answer(q)?.let { answer(it); return }
-        if (mode == "Offline" || apiKey.isBlank()) {
+        if (ChatRouting.useLocal(mode, apiKey.isNotBlank()) { ChatRouting.connected(this) }) {
             if (LocalModel.installed(this)) askLocal(q)
             else {
                 pendingQuestion=q
@@ -324,6 +324,8 @@ class MainActivity : ComponentActivity() {
         busy = true
         Thread {
             var connection: HttpsURLConnection? = null
+            var completed = false
+            var unavailable = false
             val result = try {
                 connection = URL("https://api.openai.com/v1/chat/completions").openConnection() as HttpsURLConnection
                 connection.requestMethod = "POST"
@@ -337,14 +339,25 @@ class MainActivity : ComponentActivity() {
                 val body = JSONObject().put("model","gpt-4o-mini").put("messages",array)
                 connection.outputStream.use { it.write(body.toString().toByteArray()) }
                 val status = connection.responseCode
-                if(status in 200..299) JSONObject(connection.inputStream.bufferedReader().use { it.readText() }).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
-                else "AI request failed (HTTP "+status+"). Check your API key, billing or rate limits."
-            } catch(e: Exception) { "Connection failed. Check internet access and try again." }
+                if(status in 200..299) JSONObject(connection.inputStream.bufferedReader().use { it.readText() }).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").also { completed = it.isNotBlank() }
+                else {
+                    unavailable = status == 408 || status in 500..599
+                    "AI request failed (HTTP "+status+"). Check your API key, billing or rate limits."
+                }
+            } catch(e: java.io.IOException) {
+                unavailable = true
+                "Connection failed. Check internet access and try again."
+            } catch(e: Exception) { "The cloud service returned an unreadable reply." }
             finally { connection?.disconnect() }
             runOnUiThread {
                 if (!isDestroyed) {
                     busy = false
-                    if (!result.startsWith("Connection failed") && !result.startsWith("AI request failed")) {
+                    if (unavailable && mode == "Auto" && LocalModel.installed(this)) {
+                        answer("Cloud unavailable. Answering on this phone.")
+                        askLocal(q)
+                        return@runOnUiThread
+                    }
+                    if (completed) {
                         cloudHistory.clear()
                         cloudHistory.addAll(history + listOf("assistant" to result))
                     }

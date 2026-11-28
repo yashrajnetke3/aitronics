@@ -48,3 +48,7 @@ The last green baseline before this cycle was [run 35](https://github.com/yashra
 ## Voice regression cycle for 0.11
 
 Local decoding of 16 kHz mono Flite speech using the English model extracted from the distributed 0.10 APK reproduced missed wake and camera/battery commands. Handle the observed long wake and action transcriptions. Test fixtures contain synthetic speech exclusively, packaged only in the instrumentation APK. Exercise real Vosk decoding for long/short wake, camera, battery and a negative control; also exercise missing-app and disabled-accessibility feedback. Build 43 passed the full API 35 suite and targeted API 36 cases. Single-word wake remains speaker dependent: one synthesized “hey” decoded as “they”; that ambiguous word deliberately remains ineligible for activation.
+
+## Hybrid chat recovery
+
+Auto mode checks for an active internet-capable network before selecting the cloud. A connection error, timeout or transient server error can fall back to an installed local model. Authentication failures remain visible. Offline and keyless paths avoid a network check. Live paid cloud inference requires an authorized API key.

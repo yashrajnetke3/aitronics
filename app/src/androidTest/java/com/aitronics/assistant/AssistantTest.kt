@@ -288,6 +288,14 @@ class AssistantTest {
         }
     }
 
+    @Test fun automaticRoutingHonorsOfflineAndMissingNetwork() {
+        org.junit.Assert.assertTrue(ChatRouting.useLocal("Offline", true) { error("offline checked network") })
+        org.junit.Assert.assertTrue(ChatRouting.useLocal("Auto", false) { error("keyless checked network") })
+        org.junit.Assert.assertTrue(ChatRouting.useLocal("Auto", true) { false })
+        org.junit.Assert.assertFalse(ChatRouting.useLocal("Auto", true) { true })
+        org.junit.Assert.assertFalse(ChatRouting.useLocal("Online", true) { false })
+    }
+
     @Test fun sensitivePreviewsAndAuthenticationLabelsAreExcluded() {
         for (value in listOf("Your OTP", "Code 482913", "Enter your passcode", "one-time password", "PIN")) {
             org.junit.Assert.assertTrue(value, PrivateContent.omitPreview(value))
