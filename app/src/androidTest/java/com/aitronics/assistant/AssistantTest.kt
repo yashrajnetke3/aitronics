@@ -51,14 +51,21 @@ class AssistantTest {
         for (permission in permissions) inst.uiAutomation.grantRuntimePermission(app.packageName, permission)
         val service = android.content.Intent(app,BackgroundWake::class.java)
         try {
-            ui.runOnIdle { ui.activity.startForegroundService(service) }
+            BackgroundWake.enable(app,true)
+            ui.activityRule.scenario.recreate()
+
             ui.waitUntil(90000) { BackgroundWake.running && BackgroundWake.status.startsWith("Listening for") }
             inst.uiAutomation.executeShellCommand("input keyevent KEYCODE_HOME").close()
             ui.waitUntil(10000) { BackgroundWake.foregroundCommand == null }
             org.junit.Assert.assertTrue(BackgroundWake.running)
             val manager = app.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             org.junit.Assert.assertTrue(manager.activeNotifications.any { n -> n.notification.actions?.any { it.title == "Stop" } == true })
-        } finally { app.stopService(service) }
+            manager.activeNotifications.first { it.notification.actions?.any { action -> action.title == "Stop" } == true }
+                .notification.actions.first { it.title == "Stop" }.actionIntent.send()
+            ui.waitUntil(10000) { !BackgroundWake.running && !BackgroundWake.enabled(app) }
+            ui.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+            ui.runOnIdle { org.junit.Assert.assertFalse(BackgroundWake.running) }
+        } finally { BackgroundWake.enable(app,false); app.stopService(service) }
         ui.waitUntil(10000) { !BackgroundWake.running }
     }
 

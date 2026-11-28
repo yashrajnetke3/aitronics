@@ -26,6 +26,21 @@ class BackgroundWake : Service() {
         var status by mutableStateOf("")
             private set
         var foregroundCommand: ((String) -> Boolean)? = null
+        fun prefs(context: Context) = context.getSharedPreferences("MainActivity", Context.MODE_PRIVATE)
+        fun enabled(context: Context) = prefs(context).getBoolean("automaticWake",false)
+        fun enable(context: Context, value: Boolean) {
+            prefs(context).edit().putBoolean("automaticWake",value).apply()
+        }
+        fun resumeIfEnabled(context: Context) {
+            if (running || !enabled(context)) return
+            if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED ||
+                !(context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).areNotificationsEnabled()) {
+                status = "Microphone and notifications are required. Enable them in Android settings."
+                return
+            }
+            runCatching { context.startForegroundService(Intent(context,BackgroundWake::class.java)) }
+                .onFailure { status = "Open AITRONICS to resume hands-free listening." }
+        }
         private var pending: Pair<String,String>? = null
         private var expires = 0L
         fun take(ticket: String?): String? {
@@ -60,22 +75,23 @@ class BackgroundWake : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == "STOP" || intent == null) { stopSelf(); return START_NOT_STICKY }
-        if (live) return START_NOT_STICKY
+        if (intent?.action == "STOP") enable(this,false)
+        if (!enabled(this)) { status = ""; stopSelf(); return START_NOT_STICKY }
+        if (live) return START_STICKY
         notifications.createNotificationChannel(NotificationChannel(channel,"Background wake",NotificationManager.IMPORTANCE_LOW))
         if (!notifications.areNotificationsEnabled() || notifications.getNotificationChannel(channel).importance == NotificationManager.IMPORTANCE_NONE) {
             status = "Enable background wake notifications in Android settings."; stopSelf(); return START_NOT_STICKY
         }
-        phrase = intent.getStringExtra("phrase")?.trim()?.ifBlank { "hey aitronics" } ?: "hey aitronics"
+        phrase = prefs(this).getString("wakePhrase","hey aitronics")?.trim()?.ifBlank { "hey aitronics" } ?: "hey aitronics"
         try { startForeground(id,notice("Preparing offline voice recognition…")) }
         catch (_: RuntimeException) { status = "Open AITRONICS and enable microphone access to start wake mode."; stopSelf(); return START_NOT_STICKY }
         live = true; running = true; status = "Preparing offline voice recognition…"
-        if (intent.getBooleanExtra("speak",true)) speaker = TextToSpeech(this) { speechReady = it == TextToSpeech.SUCCESS }
+        if (prefs(this).getBoolean("speak",true)) speaker = TextToSpeech(this) { speechReady = it == TextToSpeech.SUCCESS }
         audioWorker.execute {
             try { capture() } catch (_: Exception) { fail("Microphone or voice model unavailable. Stop other recordings and try again.") }
             catch (_: LinkageError) { fail("The offline speech engine is unavailable on this device.") }
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
     private fun fail(reason: String) = handler.post { if (live) { status = reason; stopSelf() } }
     private fun update(message: String, ticket: String? = null) {

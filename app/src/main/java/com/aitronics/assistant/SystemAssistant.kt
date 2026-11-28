@@ -7,7 +7,7 @@ import android.service.voice.*
 
 class SystemAssistant : VoiceInteractionService() {
     companion object { var active: SystemAssistant? = null; private set }
-    override fun onReady() { super.onReady(); active = this }
+    override fun onReady() { super.onReady(); active = this; BackgroundWake.resumeIfEnabled(this) }
     override fun onShutdown() { if (active === this) active = null; super.onShutdown() }
 }
 class AssistantSessions : VoiceInteractionSessionService() {

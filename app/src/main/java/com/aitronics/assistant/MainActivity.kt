@@ -93,16 +93,15 @@ class MainActivity : ComponentActivity() {
         val notifications = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
         if (mic && notifications.areNotificationsEnabled()) {
             localVoice.stop(); listening = false
-            runCatching { startForegroundService(Intent(this,BackgroundWake::class.java)
-                .putExtra("phrase",wakePhrase.trim()).putExtra("speak",speak)) }
-                .onFailure { answer("Could not start listening. Reopen AITRONICS and retry.") }
+            BackgroundWake.enable(this,true)
+            BackgroundWake.resumeIfEnabled(this)
         } else answer("Background wake needs microphone access and a visible notification with a Stop button.")
     }
     private fun backgroundWake() {
-        if (BackgroundWake.running) { stopService(Intent(this,BackgroundWake::class.java)); return }
-        android.app.AlertDialog.Builder(this).setTitle("Enable background wake?")
-            .setMessage("While you use other apps, the microphone listens on this phone for “$wakePhrase”. Audio stays on device. Continuous listening uses battery. Stop anytime from the notification.")
-            .setNegativeButton("Cancel",null).setPositiveButton("Start") { _,_ ->
+        if (BackgroundWake.enabled(this)) { BackgroundWake.enable(this,false); stopService(Intent(this,BackgroundWake::class.java)); return }
+        android.app.AlertDialog.Builder(this).setTitle("Set up hands-free listening")
+            .setMessage("After this one-time setup, AITRONICS automatically listens for “$wakePhrase” when opened or activated as your default assistant. Audio stays on this phone. Continuous listening uses battery. Stop from the notification to turn automatic listening off.")
+            .setNegativeButton("Cancel",null).setPositiveButton("Enable hands-free") { _,_ ->
                 val perms = mutableListOf(android.Manifest.permission.RECORD_AUDIO)
                 if (android.os.Build.VERSION.SDK_INT >= 33) perms.add(android.Manifest.permission.POST_NOTIFICATIONS)
                 backgroundPermissions.launch(perms.toTypedArray())
@@ -133,7 +132,7 @@ class MainActivity : ComponentActivity() {
         }
     }
     override fun onNewIntent(newIntent: Intent) { super.onNewIntent(newIntent); setIntent(newIntent); consumeWake() }
-    override fun onResume() { super.onResume(); BackgroundWake.foregroundCommand = ::fromWake; consumeWake() }
+    override fun onResume() { super.onResume(); BackgroundWake.resumeIfEnabled(this); BackgroundWake.foregroundCommand = ::fromWake; consumeWake() }
     override fun onPause() { BackgroundWake.foregroundCommand = null; super.onPause() }
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -369,12 +368,12 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         if(listening) Text(if(wakeRequested) "Listening for “$wakePhrase” followed by a command" else "Listening…")
-                        if(BackgroundWake.status.isNotEmpty() && BackgroundWake.running) Text(BackgroundWake.status)
+                        if(BackgroundWake.status.isNotEmpty() && BackgroundWake.enabled(this)) Text(BackgroundWake.status)
                         if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                         OutlinedTextField(input,{input=it},modifier=Modifier.fillMaxWidth(),placeholder={Text("Ask or enter a command")},maxLines=4,shape=RoundedCornerShape(20.dp))
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                             OutlinedButton(onClick={listen(false)},enabled=!busy && !BackgroundWake.running) { Text(if(listening) "Stop" else "Voice") }
-                            if (!listening) TextButton(onClick={backgroundWake()},enabled=!busy || BackgroundWake.running) { Text(if(BackgroundWake.running) "Stop wake" else "Wake") }
+                            if (!listening) TextButton(onClick={backgroundWake()},enabled=!busy || BackgroundWake.running) { Text(if(BackgroundWake.running || BackgroundWake.enabled(this@MainActivity)) "Stop wake" else "Set up wake") }
                             Button(onClick={send()},enabled=!busy,modifier=Modifier.weight(1f)) { Text("Send") }
                         }
                     }
