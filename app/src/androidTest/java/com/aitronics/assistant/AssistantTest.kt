@@ -63,7 +63,11 @@ class AssistantTest {
             manager.activeNotifications.first { it.notification.actions?.any { action -> action.title == "Stop" } == true }
                 .notification.actions.first { it.title == "Stop" }.actionIntent.send()
             ui.waitUntil(10000) { !BackgroundWake.running && !BackgroundWake.enabled(app) }
-            ui.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+            val reopen = requireNotNull(app.packageManager.getLaunchIntentForPackage(app.packageName))
+            reopen.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            inst.uiAutomation.executeShellCommand("am start -W -n " + requireNotNull(reopen.component).flattenToShortString())
+                .use { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes() }
+            ui.waitUntil(15000) { BackgroundWake.foregroundCommand != null }
             ui.runOnIdle { org.junit.Assert.assertFalse(BackgroundWake.running) }
         } finally { BackgroundWake.enable(app,false); app.stopService(service) }
         ui.waitUntil(10000) { !BackgroundWake.running }
