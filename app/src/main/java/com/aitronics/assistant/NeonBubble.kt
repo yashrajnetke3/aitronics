@@ -82,6 +82,7 @@ object NeonBubble {
     }
     private var overlay: View? = null
     val overOtherApps: Boolean get() = overlay?.isAttachedToWindow == true
+    val hasWakePanel: Boolean get() = overlay is WakePanel
     private val handler = Handler(Looper.getMainLooper())
     private val settle = Runnable { awake=false; measuring=false; voiceLevel=0f; refresh() }
     private val screen = object : BroadcastReceiver() {

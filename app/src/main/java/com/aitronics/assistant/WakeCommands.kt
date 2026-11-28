@@ -4,7 +4,6 @@ import android.content.Context
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
-import android.os.BatteryManager
 
 object WakeCommands {
     private val names = listOf("aitronics", "electronics", "i tronics", "a tronics", "eye tronics", "i tronix", "eye tronix", "i tron ics", "a tron ics", "i tronic", "i tron x", "draw next", "i try next", "trunks", "eye tronics")
@@ -46,6 +45,7 @@ object WakeCommands {
         }
     }
     fun local(context: Context, command: String): String? {
+        DeviceReadings.answer(context, command)?.let { return it }
         return when(command.lowercase()) {
             "turn on flashlight","turn off flashlight" -> {
                 val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -54,18 +54,12 @@ object WakeCommands {
                 manager.setTorchMode(id,on)
                 if(on) "Flashlight on." else "Flashlight off."
             }
-            "battery level","battery status" -> {
-                val battery = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-                "Battery level: "+battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)+" percent."
-            }
             "volume up","volume down","mute" -> {
                 val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                 val direction = when(command.lowercase()) { "volume up" -> AudioManager.ADJUST_RAISE; "volume down" -> AudioManager.ADJUST_LOWER; else -> AudioManager.ADJUST_MUTE }
                 audio.adjustStreamVolume(AudioManager.STREAM_MUSIC,direction,AudioManager.FLAG_SHOW_UI)
                 "Media volume updated."
             }
-            "time","what time is it" -> java.text.DateFormat.getTimeInstance().format(java.util.Date())
-            "date","what is the date" -> java.text.DateFormat.getDateInstance().format(java.util.Date())
             else -> null
         }
     }

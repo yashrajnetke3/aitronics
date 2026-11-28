@@ -158,6 +158,16 @@ class AssistantTest {
         ui.onNodeWithText("Download & answer · 547 MB").assertDoesNotExist()
     }
 
+    @Test fun deviceChecksValidateTheWholePlan() {
+        send("check my battery and then free storage")
+        waitForReply("Free storage:")
+        val app = ui.activity.applicationContext
+        org.junit.Assert.assertTrue(DeviceReadings.answer(app, "battery then send message")!!.contains("No steps ran"))
+        org.junit.Assert.assertTrue(DeviceReadings.answer(app, "battery then battery level")!!.contains("repeats"))
+        org.junit.Assert.assertTrue(DeviceReadings.answer(app, "date then time then battery then storage then media volume then date")!!.contains("five"))
+        org.junit.Assert.assertNull(DeviceReadings.answer(app, "write message bread and milk"))
+    }
+
     @Test fun deviceCommandsWithoutCloudKey() {
         send("battery level")
         waitForReply("Battery level:")

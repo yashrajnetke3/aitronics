@@ -51,14 +51,14 @@ class WakePanel(context: Context) : LinearLayout(context) {
         private val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap=Paint.Cap.ROUND }
         private val colors=intArrayOf(0xff7cf6dc.toInt(),0xff79dbee.toInt(),0xff78baff.toInt(),0xff9996ff.toInt(),0xffba92fa.toInt())
         override fun onDraw(canvas: Canvas) {
-            val phase=(SystemClock.uptimeMillis()%1200)/1200.0*2*PI
+            val phase=if (NeonBubble.measuring) (SystemClock.uptimeMillis()%1200)/1200.0*2*PI else 0.0
             for(i in colors.indices) {
                 val x=width*(i+.5f)/colors.size
                 val half=height*(.09f+.14f*abs(sin(phase+i*.8)).toFloat()+.19f*NeonBubble.voiceLevel)
                 paint.strokeWidth=width*.1f; paint.color=colors[i]
                 canvas.drawLine(x,height/2f-half,x,height/2f+half,paint)
             }
-            if(isShown) postInvalidateDelayed(50)
+            if(isShown && NeonBubble.measuring) postInvalidateDelayed(50)
         }
     }
 }

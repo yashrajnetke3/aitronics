@@ -189,7 +189,7 @@ class BackgroundWake : Service() {
         val locked = (getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager).isDeviceLocked
         if (locked) { triggeredUntil = 0; followUntil = 0; update("Unlock your phone to give a command."); return }
         if(tail != null) NeonBubble.wake()
-        if(command.isBlank() && NeonBubble.overOtherApps && NeonBubble.awake) {
+        if(command.isBlank() && NeonBubble.hasWakePanel) {
             update("Listening for your command…")
             handler.removeCallbacks(questionTimeout)
             handler.postDelayed(questionTimeout,10050)
