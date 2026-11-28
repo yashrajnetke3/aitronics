@@ -193,11 +193,24 @@ class MainActivity : ComponentActivity() {
             runOnUiThread { busy=false; if(!isDestroyed) answer(reply) }
         }.start()
     }
+    private val localConversation = LocalConversation()
+    private var generation by mutableStateOf<LocalModel.Generation?>(null)
+    private var partialAnswer by mutableStateOf("")
     private fun askLocal(q: String) {
         busy=true
-        LocalModel.generate(this,q) { reply ->
-            busy=false
-            if(!isDestroyed) { answer(reply); consumeWake() }
+        val current = LocalModel.Generation()
+        generation = current
+        partialAnswer = ""
+        LocalModel.generate(this, q, localConversation.snapshot(), current, { delta ->
+            if (generation === current && !isDestroyed) partialAnswer += delta
+        }) { reply, complete ->
+            if (generation !== current || isDestroyed) return@generate
+            generation = null
+            busy = false
+            partialAnswer = ""
+            if (complete) localConversation.remember(q, reply)
+            answer(reply)
+            consumeWake()
         }
     }
     private fun deviceCommand(q: String): String? {
@@ -424,7 +437,11 @@ class MainActivity : ComponentActivity() {
                             }
                             Button(onClick={LocalModel.download(this@MainActivity)}) { Text("Download & answer · 547 MB") }
                         }
-                        if(busy) { Text("Working on your reply…",color=Muted); LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                        if (busy) {
+                            Text(partialAnswer.ifBlank { "Working on your reply…" }, color=Muted, maxLines=5)
+                            LinearProgressIndicator(Modifier.fillMaxWidth())
+                            generation?.let { request -> TextButton(onClick={ request.cancel() }) { Text("Stop reply") } }
+                        }
                         CommandComposer(
                             input=input, change={input=it}, send=::send, voice={listen(false)}, wake=::backgroundWake,
                             listening=listening, busy=busy, wakeRunning=BackgroundWake.running,
@@ -472,7 +489,7 @@ class MainActivity : ComponentActivity() {
                             TextButton(onClick={launch(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))}) { Text("Notification access") }
                             TextButton(onClick={launch(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))}) { Text("Accessibility settings") }
                             TextButton(onClick={if(android.os.Build.VERSION.SDK_INT>=33) notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) else launch(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE,packageName))}) { Text("Reminder permissions") }
-                            TextButton(onClick={messages.clear(); cloudHistory.clear();persistHistory()}) { Text("Clear conversation") }
+                            TextButton(onClick={generation?.cancel(); localConversation.clear(); messages.clear(); cloudHistory.clear();persistHistory()}) { Text("Clear conversation") }
                             if(error) Text("Unable to save key securely.")
                         }
                     },confirmButton={Button(onClick={runCatching { wakePhrase=wakePhrase.trim().ifBlank { "hey aitronics" };getPreferences(MODE_PRIVATE).edit().putString("wakePhrase",wakePhrase).apply();saveKey(draft.trim());apiKey=draft.trim();settings=false; if(pendingQuestion.isNotBlank() && apiKey.isNotBlank() && mode!="Offline" && !busy) { input=pendingQuestion; send() } }.onFailure { error=true }}) { Text("Save") }},dismissButton={TextButton(onClick={settings=false}) { Text("Cancel") }})
@@ -487,6 +504,6 @@ class MainActivity : ComponentActivity() {
         state.putInt("seenCompletion",seenCompletion)
     }
     override fun onStop() { localVoice.stop(); listening=false; super.onStop() }
-    override fun onDestroy() { tts?.shutdown(); super.onDestroy() }
+    override fun onDestroy() { generation?.cancel(); generation=null; tts?.shutdown(); super.onDestroy() }
 }
 

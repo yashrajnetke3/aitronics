@@ -8,6 +8,7 @@ import javax.net.ssl.HttpsURLConnection
 import android.os.Handler
 import android.os.Looper
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
+import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -141,14 +142,49 @@ object LocalModel {
             } else "On-device model ready."
     }
 
-    fun generate(context: Context, prompt: String, reply: (String) -> Unit) {
-        perform(context, "On-device inference failed. Try a shorter prompt or another compatible model.", reply) { app ->
+    internal class Generation {
+        @Volatile var cancelled = false
+            private set
+        private var session: LlmInferenceSession? = null
+
+        @Synchronized fun cancel() {
+            if (cancelled) return
+            cancelled = true
+            session?.cancelGenerateResponseAsync()
+        }
+
+        @Synchronized fun start(active: LlmInferenceSession,
+                                progress: (String) -> Unit): java.util.concurrent.Future<String>? {
+            if (cancelled) return null
+            val result = active.generateResponseAsync { delta, _ -> if (!cancelled) progress(delta) }
+            session = active
+            return result
+        }
+        @Synchronized fun detach() { session = null }
+    }
+
+    internal fun generate(context: Context, question: String, history: List<Pair<String,String>>,
+                          request: Generation, progress: (String) -> Unit, reply: (String, Boolean) -> Unit) {
+        var completed = false
+        perform(context, "On-device inference failed. Try a shorter question or another compatible model.", { result ->
+            if (request.cancelled) reply("Reply stopped.", false) else reply(result, completed)
+        }) { app ->
+            if (request.cancelled) return@perform ""
             val model = selected(directory(app)) ?: return@perform "Import an on-device model first."
-            val engine = open(app, model)
-            try {
-                engine.generateResponse(prompt).trim().ifEmpty { "The on-device model returned an empty reply." }
-            } finally {
-                engine.close()
+            open(app, model).use { engine ->
+                val options = LlmInferenceSession.LlmInferenceSessionOptions.builder().build()
+                LlmInferenceSession.createFromOptions(engine, options).use { session ->
+                    val prompt = LocalConversation.prompt(question, history, session::sizeInTokens)
+                        ?: return@perform "This question is too long for the offline model. Try a shorter question."
+                    session.addQueryChunk(prompt)
+                    val future = request.start(session) { delta -> main.post { if (!request.cancelled) progress(delta) } }
+                        ?: return@perform ""
+                    try {
+                        val response = future.get().trim()
+                        completed = response.isNotEmpty() && !request.cancelled
+                        response.ifEmpty { "The on-device model returned an empty reply." }
+                    } finally { request.detach() }
+                }
             }
         }
     }

@@ -241,6 +241,21 @@ class AssistantTest {
         org.junit.Assert.assertEquals(1,layouts.single().lineCount)
     }
 
+    @Test fun localContextEvictsOldTurnsAndPreservesTheCurrentQuestion() {
+        val history = LocalConversation()
+        for (i in 1..6) history.remember("question$i", "answer$i")
+        val turns = history.snapshot()
+        org.junit.Assert.assertEquals(4, turns.size)
+        org.junit.Assert.assertEquals("question3", turns.first().first)
+        val prompt = LocalConversation.prompt("next", turns) { it.length * 4 }!!
+        org.junit.Assert.assertTrue(prompt.contains("answer6"))
+        org.junit.Assert.assertFalse(prompt.contains("answer3"))
+        org.junit.Assert.assertTrue(prompt.endsWith("User: next\nAssistant:"))
+        org.junit.Assert.assertNull(LocalConversation.prompt("oversized", turns) { 321 })
+        history.clear()
+        org.junit.Assert.assertEquals("next", LocalConversation.prompt("next", history.snapshot()) { 2 })
+    }
+
     @Test fun downloadedModelAnswersOriginalQuestion() {
         val inst = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
         org.junit.Assume.assumeTrue(androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("modelSmoke") == "true")
@@ -251,6 +266,12 @@ class AssistantTest {
             ui.waitUntil(480000) { !LocalModel.downloading }
             org.junit.Assert.assertTrue(LocalModel.downloadMessage,LocalModel.installed(app))
             ui.waitUntil(180000) { ui.onAllNodesWithText("Paris",substring=true,ignoreCase=true).fetchSemanticsNodes().isNotEmpty() }
+            ui.waitUntil(180000) { ui.onAllNodesWithText("Stop reply").fetchSemanticsNodes().isEmpty() }
+            send("Explain how cities grow in detail.")
+            ui.onNodeWithText("Stop reply").performClick()
+            waitForReply("Reply stopped.")
+            send("What is 12 times 9?")
+            waitForReply("108")
         } finally {
             val done=java.util.concurrent.CountDownLatch(1)
             LocalModel.delete(app) { done.countDown() }
