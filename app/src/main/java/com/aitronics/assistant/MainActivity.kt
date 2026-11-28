@@ -40,6 +40,8 @@ class MainActivity : ComponentActivity() {
     private var input by mutableStateOf("")
     private var apiKey by mutableStateOf("")
     private var settings by mutableStateOf(false)
+    private var pendingQuestion by mutableStateOf("")
+    private var seenCompletion = 0
     private var busy by mutableStateOf(false)
     private var mode by mutableStateOf("Auto")
     private var overlayAllowed by mutableStateOf(false)
@@ -48,7 +50,10 @@ class MainActivity : ComponentActivity() {
     private var tts: TextToSpeech? = null
     private var speechReady = false
     private val voice = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) { input = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty(); send() }
+        if (result.resultCode == RESULT_OK) {
+            val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
+            if (text.isBlank()) answer("I didn’t hear a question. Tap Voice input and try again.") else { input=text; send() }
+        }
     }
     private var wakePhrase by mutableStateOf("hey aitronics")
     private var listening by mutableStateOf(false)
@@ -68,6 +73,10 @@ class MainActivity : ComponentActivity() {
             .onFailure { localVoice.stop(); listening = false; answer("Could not start on-device voice.") }
     }
     private fun listen(wake: Boolean) {
+        if (!wake && BackgroundWake.running) {
+            if (!BackgroundWake.listenForQuestion()) answer("The microphone is starting. Try Voice input again in a moment.")
+            return
+        }
         if (listening) { localVoice.stop(); listening = false; return }
         if (!wake && mode == "Online") {
             runCatching { voice.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
@@ -169,14 +178,11 @@ class MainActivity : ComponentActivity() {
         if (speak && speechReady) tts?.speak(value,TextToSpeech.QUEUE_FLUSH,null,"answer")
     }
     private fun launch(intent: Intent): Boolean = runCatching { startActivity(intent); true }.getOrDefault(false)
-    private fun offline(q: String): String {
-        val s = q.trim().lowercase()
-        return when {
-            s in listOf("hello","hi","hey") -> "Hello! AITRONICS is ready in offline command mode."
-            s == "what time is it" || s == "time" -> java.text.DateFormat.getTimeInstance().format(java.util.Date())
-            s == "date" || s == "what is the date" -> java.text.DateFormat.getDateInstance().format(java.util.Date())
-            s == "help" -> "Offline commands: open camera, open settings, dial a number, time, date. Web search and YouTube need internet."
-            else -> "Local language model is not installed yet. Offline command mode supports time, date, camera, settings and dialer."
+    private fun askLocal(q: String) {
+        busy=true
+        LocalModel.generate(this,q) { reply ->
+            busy=false
+            if(!isDestroyed) { answer(reply); consumeWake() }
         }
     }
     private fun deviceCommand(q: String): String? {
@@ -236,7 +242,9 @@ class MainActivity : ComponentActivity() {
     }
     private fun send() {
         val q = WakeCommands.normalize(input,wakePhrase)
-        if (q.isEmpty() || busy) return
+        if (busy || input.isBlank()) return
+        if (q.isBlank()) { input=""; answer("I’m listening. What would you like to ask?"); return }
+        pendingQuestion=""
         val keyboard = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
         keyboard.hideSoftInputFromWindow(window.decorView.windowToken, 0)
         input = ""
@@ -282,15 +290,15 @@ class MainActivity : ComponentActivity() {
         }
         if (intent != null) { answer(if(launch(intent)) "Opened requested action." else "No compatible application found."); return }
         if (lower.startsWith("open ")) { answer(runCatching { openInstalledApp(this, q.substringAfter(' ')) }.getOrDefault("App could not be opened.")); return }
-        if (mode == "Offline" || (mode == "Auto" && apiKey.isBlank())) {
-            val local = offline(q)
-            if (local.startsWith("Local language model") && LocalModel.installed(this)) {
-                busy = true
-                LocalModel.generate(this, q) { reply -> busy = false; if (!isDestroyed) answer(reply) }
-            } else answer(local)
+        QuickAnswers.answer(q)?.let { answer(it); return }
+        if (mode == "Offline" || apiKey.isBlank()) {
+            if (LocalModel.installed(this)) askLocal(q)
+            else {
+                pendingQuestion=q
+                answer("I can answer this on your phone after a one-time AI download. Tap Download & answer below, or add your OpenAI API key in Settings.")
+            }
             return
         }
-        if (apiKey.isBlank()) { answer("Online mode requires an API key. Choose Auto or Offline in Settings."); return }
         val secret = apiKey
         val history = cloudHistory.takeLast(18) + listOf("user" to q)
         busy = true
@@ -320,13 +328,15 @@ class MainActivity : ComponentActivity() {
                         cloudHistory.clear()
                         cloudHistory.addAll(history + listOf("assistant" to result))
                     }
-                    answer(result)
+                    answer(result.ifBlank { "The AI returned an empty reply. Please retry your question." })
                 }
             }
         }.start()
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingQuestion=savedInstanceState?.getString("pendingQuestion").orEmpty()
+        seenCompletion=savedInstanceState?.getInt("seenCompletion") ?: LocalModel.completion
         NeonBubble.load(this)
         val prefs = getPreferences(MODE_PRIVATE)
         speak = prefs.getBoolean("speak",true)
@@ -335,17 +345,25 @@ class MainActivity : ComponentActivity() {
         localVoice = LocalVoice(this) { command, status ->
             listening = false
             if (!command.isNullOrBlank()) { input = command; send() }
-            else if (status != null) answer(status)
+            else answer(status ?: "I didn’t hear any words. Try Voice input again or type your question.")
         }
         apiKey = loadKey()
         runCatching { val a = JSONArray(getPreferences(MODE_PRIVATE).getString("history","[]")); for(i in 0 until a.length()) { val m=a.getJSONObject(i); messages.add(m.getString("role") to m.getString("text")) } }
         mode = getPreferences(MODE_PRIVATE).getString("mode","Auto") ?: "Auto"
         tts = TextToSpeech(this) { speechReady = it == TextToSpeech.SUCCESS }
         setContent {
+            LaunchedEffect(LocalModel.completion) {
+                if(seenCompletion!=LocalModel.completion) {
+                    seenCompletion=LocalModel.completion
+                    if(pendingQuestion.isNotBlank() && LocalModel.installed(this@MainActivity)) {
+                        val question=pendingQuestion; pendingQuestion=""; askLocal(question)
+                    } else if(LocalModel.downloadMessage.isNotBlank()) answer(LocalModel.downloadMessage)
+                }
+            }
             MaterialTheme(colorScheme=darkColorScheme(primary=Mint,onPrimary=Night,background=Night,surface=Panel,onSurface=Color.White)) {
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF131D29),Night,Night)))) {
                     Column(Modifier.safeDrawingPadding().imePadding().padding(horizontal=18.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                        AssistantHeader(when { mode=="Offline" -> "Offline assistant"; apiKey.isBlank() -> "On-device commands"; else -> "$mode · Cloud configured" }) { settings=true }
+                        AssistantHeader(when { mode=="Offline" -> "Offline assistant"; apiKey.isBlank() && LocalModel.installed(this@MainActivity) -> "Offline AI ready"; apiKey.isBlank() -> "On-device commands"; else -> "$mode · Cloud configured" }) { settings=true }
                         HorizontalDivider(color=Edge)
                         if (messages.isEmpty()) {
                             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
@@ -360,7 +378,13 @@ class MainActivity : ComponentActivity() {
                         }
                         if(listening) Text(if(wakeRequested) "Listening for “$wakePhrase” followed by a command" else "Listening…")
                         if(BackgroundWake.status.isNotEmpty() && BackgroundWake.enabled(this@MainActivity)) Text(BackgroundWake.status)
-                        if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        if(LocalModel.downloading) {
+                            Text(if(LocalModel.progress < 100) "Downloading offline AI · ${LocalModel.progress}%" else "Preparing the answer model…")
+                            if(LocalModel.progress < 100) TextButton(onClick={LocalModel.cancelDownload()}) { Text("Cancel download") }
+                        } else if(pendingQuestion.isNotBlank()) {
+                            Button(onClick={LocalModel.download(this@MainActivity)}) { Text("Download & answer · 547 MB") }
+                        }
+                        if(busy) { Text("Working on your reply…",color=Muted); LinearProgressIndicator(Modifier.fillMaxWidth()) }
                         CommandComposer(
                             input=input, change={input=it}, send=::send, voice={listen(false)}, wake=::backgroundWake,
                             listening=listening, busy=busy, wakeRunning=BackgroundWake.running,
@@ -387,8 +411,9 @@ class MainActivity : ComponentActivity() {
                                     FilterChip(selected=mode==option,onClick={mode=option;getPreferences(MODE_PRIVATE).edit().putString("mode",option).apply()},label={Text(option)})
                                 }
                             }
-                            Text("Built-in commands work offline. For offline chat, import a compatible MediaPipe LLM .task model. Cloud AI uses your own API key.")
-                            TextButton(enabled=!busy,onClick={chooseModel.launch(arrayOf("*/*"))}) { Text("Import offline model") }
+                            Text("Offline chat runs on your phone with Qwen2.5 0.5B. Cloud chat uses your OpenAI API key.")
+                            if(!LocalModel.installed(this@MainActivity)) TextButton(enabled=!busy && !LocalModel.downloading,onClick={settings=false;LocalModel.download(this@MainActivity)}) { Text("Download offline AI · 547 MB") }
+                            TextButton(enabled=!busy && !LocalModel.downloading,onClick={chooseModel.launch(arrayOf("*/*"))}) { Text("Import offline model") }
                             if (LocalModel.installed(this@MainActivity)) TextButton(enabled=!busy,onClick={
                                 android.app.AlertDialog.Builder(this@MainActivity).setMessage("Delete the imported offline model?")
                                     .setNegativeButton("Cancel",null).setPositiveButton("Delete") { _,_ ->
@@ -407,10 +432,15 @@ class MainActivity : ComponentActivity() {
                             TextButton(onClick={messages.clear(); cloudHistory.clear();persistHistory()}) { Text("Clear conversation") }
                             if(error) Text("Unable to save key securely.")
                         }
-                    },confirmButton={Button(onClick={runCatching { wakePhrase=wakePhrase.trim().ifBlank { "hey aitronics" };getPreferences(MODE_PRIVATE).edit().putString("wakePhrase",wakePhrase).apply();saveKey(draft.trim());apiKey=draft.trim();settings=false }.onFailure { error=true }}) { Text("Save") }},dismissButton={TextButton(onClick={settings=false}) { Text("Cancel") }})
+                    },confirmButton={Button(onClick={runCatching { wakePhrase=wakePhrase.trim().ifBlank { "hey aitronics" };getPreferences(MODE_PRIVATE).edit().putString("wakePhrase",wakePhrase).apply();saveKey(draft.trim());apiKey=draft.trim();settings=false; if(pendingQuestion.isNotBlank() && apiKey.isNotBlank() && mode!="Offline" && !busy) { input=pendingQuestion; send() } }.onFailure { error=true }}) { Text("Save") }},dismissButton={TextButton(onClick={settings=false}) { Text("Cancel") }})
                 }
             }
         }
+    }
+    override fun onSaveInstanceState(state: Bundle) {
+        super.onSaveInstanceState(state)
+        state.putString("pendingQuestion",pendingQuestion)
+        state.putInt("seenCompletion",seenCompletion)
     }
     override fun onStop() { localVoice.stop(); listening=false; super.onStop() }
     override fun onDestroy() { tts?.shutdown(); super.onDestroy() }

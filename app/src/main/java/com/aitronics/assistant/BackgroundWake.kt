@@ -25,6 +25,15 @@ class BackgroundWake : Service() {
             private set
         var status by mutableStateOf("")
             private set
+        private var listener: BackgroundWake? = null
+        fun listenForQuestion(): Boolean {
+            val active = listener ?: return false
+            active.triggeredUntil = SystemClock.elapsedRealtime() + 15000
+            active.update("Listening for your question…")
+            active.handler.removeCallbacks(active.questionTimeout)
+            active.handler.postDelayed(active.questionTimeout,15050)
+            return true
+        }
         var foregroundCommand: ((String) -> Boolean)? = null
         fun prefs(context: Context) = context.getSharedPreferences("MainActivity", Context.MODE_PRIVATE)
         fun enabled(context: Context) = prefs(context).getBoolean("automaticWake",false)
@@ -58,6 +67,12 @@ class BackgroundWake : Service() {
     @Volatile private var live = false
     private var followUntil = 0L
     private var triggeredUntil = 0L
+    private val questionTimeout = Runnable {
+        if (triggeredUntil != 0L && SystemClock.elapsedRealtime() >= triggeredUntil) {
+            triggeredUntil=0L
+            update("No words recognized. Tap Voice input to try again.")
+        }
+    }
     private var phrase = "hey aitronics"
     private var speaker: TextToSpeech? = null
     @Volatile private var suppressAudioUntil = 0L
@@ -137,7 +152,7 @@ class BackgroundWake : Service() {
                 check(mic.state == AudioRecord.STATE_INITIALIZED)
                 mic.startRecording()
                 check(mic.recordingState == AudioRecord.RECORDSTATE_RECORDING)
-                handler.post { if (live) { update("Listening for “$phrase”"); NeonBubble.attach(this) } }
+                handler.post { if (live) { listener=this; update("Listening for “$phrase”"); NeonBubble.attach(this) } }
                 val samples = ShortArray(1600)
                 var discarding = false
                 while(live) {
@@ -188,6 +203,7 @@ class BackgroundWake : Service() {
                 return
             }
         }
+        if (normalized.isNotBlank()) update("Listening for “$phrase”")
         if (foregroundCommand?.invoke(normalized) == true) return
         val ticket = UUID.randomUUID().toString()
         pending = ticket to normalized; expires = now + 60000
@@ -197,6 +213,7 @@ class BackgroundWake : Service() {
         } }
     }
     override fun onDestroy() {
+        if(listener === this) listener=null
         NeonBubble.detach()
         live = false; running = false; pending = null
         speaker?.shutdown(); handler.removeCallbacksAndMessages(null)

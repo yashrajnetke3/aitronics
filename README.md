@@ -26,3 +26,7 @@ After hands-free setup, say **Hey** or **Hey AITRONICS**, followed by your comma
 ### Neon wake bubble
 
 The bubble is on by default. While hands-free listening runs, the pinned bubble stays visible while the phone is unlocked and pulses for four seconds when a wake phrase is recognized. To see it above another app, select **Settings → Allow bubble over other apps** and grant Android’s display permission. Turn off **Keep bubble visible** for a wake-only indicator, or turn off **Neon wake bubble** to hide the indicator while keeping voice commands active.
+
+### Answering questions on a fresh installation
+
+Greetings, basic arithmetic and device commands work immediately. For general questions, type or speak your question, then select **Download & answer** (547 MB). AITRONICS verifies the pinned Qwen2.5 0.5B model before activating it, then answers the pending question locally. Keep the app open until setup finishes. A compatible imported model or an OpenAI key in Settings also enables chat. Voice input can use the active hands-free microphone without waiting for a wake word.

@@ -98,7 +98,7 @@ val Edge = Color(0xFF30394A)
             }
             HorizontalDivider(color=Edge)
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
-                TextButton(onClick=voice,enabled=!busy && !wakeRunning) { Text(if(listening) "Stop voice" else "Voice input") }
+                TextButton(onClick=voice,enabled=!busy) { Text(if(listening) "Stop voice" else "Voice input") }
                 if(!listening) TextButton(onClick=wake,enabled=!busy || wakeRunning) {
                     Text(if(wakeRunning || wakeEnabled) "Stop wake" else "Set up wake")
                 }

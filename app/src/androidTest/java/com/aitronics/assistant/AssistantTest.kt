@@ -125,6 +125,34 @@ class AssistantTest {
         org.junit.Assert.assertEquals(1,layouts.single().lineCount)
     }
 
+    @Test fun downloadedModelAnswersOriginalQuestion() {
+        val inst = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        org.junit.Assume.assumeTrue(androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("modelSmoke") == "true")
+        val app=inst.targetContext
+        try {
+            send("What is the capital of France? Answer with the city name.")
+            ui.onNodeWithText("Download & answer · 547 MB").performClick()
+            ui.waitUntil(480000) { !LocalModel.downloading }
+            org.junit.Assert.assertTrue(LocalModel.downloadMessage,LocalModel.installed(app))
+            ui.waitUntil(180000) { ui.onAllNodesWithText("Paris",substring=true,ignoreCase=true).fetchSemanticsNodes().isNotEmpty() }
+        } finally {
+            val done=java.util.concurrent.CountDownLatch(1)
+            LocalModel.delete(app) { done.countDown() }
+            done.await(30,java.util.concurrent.TimeUnit.SECONDS)
+        }
+    }
+
+    @Test fun questionsReplyOrOfferModelOnFreshInstall() {
+        send("What is 12 times 9?")
+        waitForReply("108")
+        send("Explain how a camera sensor works")
+        waitForReply("one-time AI download")
+        ui.onNodeWithText("Download & answer · 547 MB").assertIsDisplayed()
+        send("who are you?")
+        waitForReply("I’m AITRONICS")
+        ui.onNodeWithText("Download & answer · 547 MB").assertDoesNotExist()
+    }
+
     @Test fun deviceCommandsWithoutCloudKey() {
         send("battery level")
         waitForReply("Battery level:")
