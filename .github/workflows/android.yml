@@ -40,6 +40,7 @@ jobs:
           disable-animations: true
           script: |
             gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.modelSmoke=${{ contains(github.event.head_commit.message, '[model-check]') }}
+            adb pull /data/local/tmp/aitronics-wake.png assistant-wake.png
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am start -W -n com.aitronics.assistant/.MainActivity
             sleep 2
@@ -48,7 +49,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AITRONICS-screen
-          path: assistant-home.png
+          path: |
+            assistant-home.png
+            assistant-wake.png
       - name: Show failing device assertions
         if: failure()
         run: |

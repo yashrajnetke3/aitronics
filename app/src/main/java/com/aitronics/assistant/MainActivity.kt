@@ -402,7 +402,10 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     if(NeonBubble.enabled && NeonBubble.awake) {
-                        Box(Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top=70.dp,end=12.dp)) { Orb(72.dp,true) }
+                        androidx.compose.ui.viewinterop.AndroidView(factory={ WakePanel(it) },
+                            update={ it.showState(NeonBubble.listening) },
+                            modifier=Modifier.align(Alignment.BottomCenter).safeDrawingPadding().imePadding()
+                                .padding(horizontal=12.dp,vertical=18.dp).widthIn(max=360.dp).fillMaxWidth())
                     }
                 }
                 if(settings) {

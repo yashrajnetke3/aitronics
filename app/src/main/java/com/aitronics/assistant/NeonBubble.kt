@@ -71,10 +71,19 @@ object NeonBubble {
     var awake by mutableStateOf(false); private set
     private var inApp = false
     private var context: Context? = null
-    private var overlay: NeonOrb? = null
+    var listening by mutableStateOf(false); private set
+    @Volatile var voiceLevel = 0f; private set
+    @Volatile var measuring = false; private set
+    fun meter(samples: ShortArray,count: Int) {
+        if(!measuring) return
+        var sum = 0.0
+        for(i in 0 until count step 4) { val v=samples[i].toDouble(); sum+=v*v }
+        voiceLevel=(sqrt(sum/((count+3)/4))/4200.0).toFloat().coerceIn(0f,1f)
+    }
+    private var overlay: View? = null
     val overOtherApps: Boolean get() = overlay?.isAttachedToWindow == true
     private val handler = Handler(Looper.getMainLooper())
-    private val settle = Runnable { awake=false; refresh() }
+    private val settle = Runnable { awake=false; measuring=false; voiceLevel=0f; refresh() }
     private val screen = object : BroadcastReceiver() {
         override fun onReceive(context: Context,intent: Intent) { refresh() }
     }
@@ -85,7 +94,7 @@ object NeonBubble {
     fun configure(c: Context,show: Boolean,pin: Boolean) {
         enabled=show; pinned=pin
         BackgroundWake.prefs(c).edit().putBoolean("neonBubble",show).putBoolean("pinNeonBubble",pin).apply()
-        if(!show) { handler.removeCallbacks(settle); awake=false }
+        if(!show) { handler.removeCallbacks(settle); awake=false; measuring=false; voiceLevel=0f }
         refresh()
     }
     fun foreground(value: Boolean) { inApp=value; refresh() }
@@ -97,12 +106,18 @@ object NeonBubble {
         })
         refresh()
     }
-    fun wake() {
+    fun wake(duration: Long = 10000L) {
         if(!enabled) return
-        awake=true; handler.removeCallbacks(settle); handler.postDelayed(settle,4000); refresh()
+        listening=true; measuring=true; awake=true
+        handler.removeCallbacks(settle); handler.postDelayed(settle,duration); refresh()
+    }
+    fun received() {
+        if(!awake) return
+        listening=false; measuring=false; voiceLevel=0f
+        handler.removeCallbacks(settle); handler.postDelayed(settle,1600); refresh()
     }
     fun detach() {
-        handler.removeCallbacks(settle); awake=false
+        handler.removeCallbacks(settle); awake=false; measuring=false; voiceLevel=0f
         context?.let { remove(it); it.unregisterReceiver(screen) }; context=null
     }
     private fun remove(c: Context) {
@@ -114,13 +129,21 @@ object NeonBubble {
         val interactive=(c.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).isInteractive
         if(inApp || !enabled || (!awake && !pinned) || locked || !interactive || !Settings.canDrawOverlays(c)) { remove(c); return }
         val existing=overlay
-        if(existing!=null) { existing.awake=awake; return }
-        val dp=c.resources.displayMetrics.density
-        val size=(62*dp).roundToInt()
-        val params=WindowManager.LayoutParams(size,size,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        if(existing is WakePanel && awake) { existing.showState(listening); return }
+        if(existing is NeonOrb && !awake) return
+        remove(c)
+        val dm=c.resources.displayMetrics
+        fun dp(v:Int)=(dm.density*v).roundToInt()
+        val width=if(awake) min(dp(360),dm.widthPixels-dp(24)).coerceAtLeast(1) else dp(62)
+        val height=if(awake) WindowManager.LayoutParams.WRAP_CONTENT else dp(62)
+        val params=WindowManager.LayoutParams(width,height,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-            PixelFormat.TRANSLUCENT).apply { gravity=Gravity.TOP or Gravity.END; x=(6*dp).toInt(); y=(105*dp).toInt(); alpha=.75f }
-        val orb=NeonOrb(c).also { it.awake=awake; it.importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO }
-        runCatching { (c.getSystemService(Context.WINDOW_SERVICE) as WindowManager).addView(orb,params) }.onSuccess { overlay=orb }
+            PixelFormat.TRANSLUCENT).apply {
+                gravity=if(awake) Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL else Gravity.TOP or Gravity.END
+                x=if(awake) 0 else dp(6); y=if(awake) dp(24) else dp(105); alpha=.78f
+            }
+        val view=if(awake) WakePanel(c).apply { showState(listening) } else NeonOrb(c)
+        runCatching { (c.getSystemService(Context.WINDOW_SERVICE) as WindowManager).addView(view,params) }.onSuccess { overlay=view }
+
     }
 }

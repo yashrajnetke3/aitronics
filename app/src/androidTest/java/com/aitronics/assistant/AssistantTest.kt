@@ -63,8 +63,13 @@ class AssistantTest {
             ui.waitUntil(10000) { NeonBubble.overOtherApps }
             inst.runOnMainSync { NeonBubble.configure(app,true,false) }
             ui.waitUntil(5000) { !NeonBubble.overOtherApps }
-            inst.runOnMainSync { NeonBubble.wake() }
-            ui.waitUntil(5000) { NeonBubble.overOtherApps }
+            inst.runOnMainSync { BackgroundWake.finalTranscript("hey aitronics") }
+            ui.waitUntil(5000) { NeonBubble.overOtherApps && NeonBubble.awake && NeonBubble.listening }
+            inst.uiAutomation.executeShellCommand("screencap -p /data/local/tmp/aitronics-wake.png").use {
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes()
+            }
+            inst.runOnMainSync { BackgroundWake.finalTranscript("battery level") }
+            ui.waitUntil(5000) { NeonBubble.awake && !NeonBubble.listening && BackgroundWake.status.startsWith("Battery level:") }
             ui.waitUntil(8000) { !NeonBubble.overOtherApps }
             inst.runOnMainSync { NeonBubble.configure(app,true,true) }
             org.junit.Assert.assertTrue(BackgroundWake.running)

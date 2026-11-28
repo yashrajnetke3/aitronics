@@ -25,7 +25,7 @@ After hands-free setup, say **Hey** or **Hey AITRONICS**, followed by your comma
 
 ### Neon wake bubble
 
-The bubble is on by default. While hands-free listening runs, the pinned bubble stays visible while the phone is unlocked and pulses for four seconds when a wake phrase is recognized. To see it above another app, select **Settings → Allow bubble over other apps** and grant Android’s display permission. Turn off **Keep bubble visible** for a wake-only indicator, or turn off **Neon wake bubble** to hide the indicator while keeping voice commands active.
+The bubble is on by default. While hands-free listening runs, the pinned bubble stays visible while the phone is unlocked and expands into a neon listening panel at the bottom when a wake phrase is recognized. Say your command within ten seconds; a short confirmation appears when the command is recognized. To see it above another app, select **Settings → Allow bubble over other apps** and grant Android’s display permission. Turn off **Keep bubble visible** for a wake-only indicator, or turn off **Neon wake bubble** to hide the indicator while keeping voice commands active.
 
 ### Answering questions on a fresh installation
 

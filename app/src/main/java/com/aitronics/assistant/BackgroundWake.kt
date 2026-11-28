@@ -29,11 +29,13 @@ class BackgroundWake : Service() {
         fun listenForQuestion(): Boolean {
             val active = listener ?: return false
             active.triggeredUntil = SystemClock.elapsedRealtime() + 15000
+            NeonBubble.wake(15000)
             active.update("Listening for your question…")
             active.handler.removeCallbacks(active.questionTimeout)
             active.handler.postDelayed(active.questionTimeout,15050)
             return true
         }
+        internal fun finalTranscript(words: String) { listener?.heard(words) }
         var foregroundCommand: ((String) -> Boolean)? = null
         fun prefs(context: Context) = context.getSharedPreferences("MainActivity", Context.MODE_PRIVATE)
         fun enabled(context: Context) = prefs(context).getBoolean("automaticWake",false)
@@ -164,9 +166,10 @@ class BackgroundWake : Service() {
                         continue
                     }
                     if (discarding) { decoder.reset(); discarding = false }
+                    NeonBubble.meter(samples,count)
                     if (decoder.acceptWaveForm(samples,count)) {
                         val words = JSONObject(decoder.result).optString("text")
-                        if (words.isNotBlank()) handler.post { if (live) heard(words) }
+                        if (words.isNotBlank()) handler.post { if (live) finalTranscript(words) }
                     }
                 }
             } finally { runCatching { mic.stop() }; mic.release() }
@@ -186,6 +189,13 @@ class BackgroundWake : Service() {
         val locked = (getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager).isDeviceLocked
         if (locked) { triggeredUntil = 0; followUntil = 0; update("Unlock your phone to give a command."); return }
         if(tail != null) NeonBubble.wake()
+        if(command.isBlank() && NeonBubble.overOtherApps && NeonBubble.awake) {
+            update("Listening for your command…")
+            handler.removeCallbacks(questionTimeout)
+            handler.postDelayed(questionTimeout,10050)
+            return
+        }
+        if(command.isNotBlank()) NeonBubble.received()
         val normalized = WakeCommands.normalize(command,phrase)
         followUntil = if (normalized.startsWith("open ",true) || ScreenCommands.handles(normalized)) now + 15000 else 0
         if (normalized.isNotBlank()) {
