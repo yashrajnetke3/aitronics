@@ -115,7 +115,7 @@ class AssistantTest {
                 fun recognize(name: String): String {
                     val words = mutableListOf<String>()
                     org.vosk.Recognizer(model, 16000f).use { recognizer ->
-                        java.util.zip.GZIPInputStream(inst.context.assets.open("voice/$name.gz")).use { input ->
+                        java.util.zip.GZIPInputStream(inst.context.assets.open("voice/$name.clip")).use { input ->
                             val buffer = ByteArray(3200)
                             while (true) {
                                 var count = 0
