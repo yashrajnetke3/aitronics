@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
     private val messages = mutableStateListOf<Pair<String,String>>()
     private var tts: TextToSpeech? = null
     private var speechReady = false
+    private val bomPicker = BomPicker(this, ::answer)
     private val memoryExport = MemoryExport(this, ::answer)
     private val voice = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
@@ -140,6 +141,10 @@ class MainActivity : ComponentActivity() {
         launch(Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS))
     }
     private fun fromWake(command: String): Boolean {
+        if (generation != null && command.trim().lowercase() in setOf("stop", "cancel", "stop reply", "cancel reply")) {
+            generation?.cancel()
+            return true
+        }
         if (busy) return false
         if (command.isEmpty()) messages.add("assistant" to "Listening for your command.")
         else { input = command; send() }
@@ -279,7 +284,7 @@ class MainActivity : ComponentActivity() {
         runCatching { deviceCommand(q) }.getOrElse { "Device action unavailable or permission denied." }?.let { answer(it); return }
         val lower = q.lowercase()
         if (lower == "help") {
-            answer("Try Hey, open WhatsApp; open chat with Sam; write message I am on my way; read draft; send message; confirm send; scroll down; close camera; battery level, volume up, read screen, scroll down, dial 12345, message 12345, summarize notifications, remember my shift starts at nine, recall memory, export memory 3, or remind me in 10 minutes to check the line.")
+            answer("Try Hey, open WhatsApp; open chat with Sam; write message I am on my way; read draft; send message; confirm send; scroll down; close camera; battery level, volume up, read screen, scroll down, dial 12345, message 12345, summarize notifications, remember my shift starts at nine, recall memory, export memory 3, analyze BOM, or remind me in 10 minutes to check the line.")
             return
         }
         if (lower.startsWith("remember ")) { memory { it.add(Memory(note=q.substringAfter(' ').take(4000))); "Saved to local memory." }; return }
@@ -288,6 +293,7 @@ class MainActivity : ComponentActivity() {
                 .ifBlank { "No saved memories." } }
             return
         }
+        if (lower in setOf("analyze bom", "analyse bom", "analyze bill of materials")) { bomPicker.open(); return }
         if (lower == "export memory" || lower.startsWith("export memory ")) { memoryExport.start(lower); return }
         if (MemoryReview.handles(q)) { MemoryReview.open(this, q, ::answer); return }
         if (lower == "forget all memories") {
@@ -465,6 +471,7 @@ class MainActivity : ComponentActivity() {
                                 if(!launch(Intent(action,Uri.parse("package:"+packageName)))) launch(Intent(action))
                             }
                             HorizontalDivider(color=Edge)
+                            TextButton(onClick={settings=false; bomPicker.open()}) { Text("Analyze BOM CSV") }
                             Text("Assistant mode")
                             Row(horizontalArrangement=Arrangement.spacedBy(4.dp)) {
                                 listOf("Auto","Offline","Online").forEach { option ->
