@@ -1,5 +1,14 @@
 # AITRONICS development checkpoint
 
+## Current verified release checkpoint
+
+[AITRONICS 0.12, build 46](https://github.com/yashrajnetke3/aitronics/actions/runs/46173958311) passed at 45ac2d8cbb4ee6b5878795590fa9f1ef5a8ac804. Android 15 ran 21 instrumentation tests, including real model download/inference, document-picker cancellation, privacy filters, failed writes and interrupted model transfers. Android 16 ran three targeted speech-routing, camera-command and permission-feedback tests. Lint, assemble and APK signature verification passed.
+
+APK SHA-256: e6ef3b30ff50c7aef7e029d763a5b7860a5d554d1923c9b6188303f8018b9e81. Version code 12. Debug certificate SHA-256: 8ce15df64e629a8028845f21349140ca59b2edef1aecb6e69333c0eb768dab79.
+
+Resume independent work with bounded local conversation context and cancellation for inference. Keep the current action routing and completed tests. Remaining external checks include Samsung microphone pickup, actual third-party messaging interfaces, an authorized cloud key, and an in-place upgrade using the original signing key. The multi-agent, vision, manufacturing and hardware roadmap remains open.
+
+
 ## Verified checkpoint on 28 November 2026
 
 [Build 40](https://github.com/yashrajnetke3/aitronics/actions/runs/46147519833) passed at ee350f7f34a49f582770a5289c5399c6091405b7. Android 15 / API 35 instrumentation completed 13 tests with the real model smoke test enabled. Debug assembly, lint, APK reinstall and activity launch passed. The signed APK identifies itself as com.aitronics.assistant 0.10 (version code 10, minimum API 26). APK SHA-256 is 600f5b4184ce46dc43b352b1c866a54de250445f4a700a013ab7154847bf8c22.
