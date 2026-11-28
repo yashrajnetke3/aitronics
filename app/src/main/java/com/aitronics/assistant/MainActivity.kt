@@ -12,6 +12,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
@@ -39,6 +42,7 @@ class MainActivity : ComponentActivity() {
     private var settings by mutableStateOf(false)
     private var busy by mutableStateOf(false)
     private var mode by mutableStateOf("Auto")
+    private var overlayAllowed by mutableStateOf(false)
     private var speak by mutableStateOf(true)
     private val messages = mutableStateListOf<Pair<String,String>>()
     private var tts: TextToSpeech? = null
@@ -132,8 +136,8 @@ class MainActivity : ComponentActivity() {
         }
     }
     override fun onNewIntent(newIntent: Intent) { super.onNewIntent(newIntent); setIntent(newIntent); consumeWake() }
-    override fun onResume() { super.onResume(); BackgroundWake.resumeIfEnabled(this); BackgroundWake.foregroundCommand = ::fromWake; consumeWake() }
-    override fun onPause() { BackgroundWake.foregroundCommand = null; super.onPause() }
+    override fun onResume() { super.onResume(); overlayAllowed=android.provider.Settings.canDrawOverlays(this); NeonBubble.foreground(true); BackgroundWake.resumeIfEnabled(this); BackgroundWake.foregroundCommand = ::fromWake; consumeWake() }
+    override fun onPause() { NeonBubble.foreground(false); BackgroundWake.foregroundCommand = null; super.onPause() }
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey("aitronics_api", null) as? SecretKey)?.let { return it }
@@ -323,6 +327,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        NeonBubble.load(this)
         val prefs = getPreferences(MODE_PRIVATE)
         speak = prefs.getBoolean("speak",true)
         saveHistory = prefs.getBoolean("saveHistory", prefs.contains("history"))
@@ -337,47 +342,32 @@ class MainActivity : ComponentActivity() {
         mode = getPreferences(MODE_PRIVATE).getString("mode","Auto") ?: "Auto"
         tts = TextToSpeech(this) { speechReady = it == TextToSpeech.SUCCESS }
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme(primary=Color(0xFF64E8FF),background=Color(0xFF08111F),surface=Color(0xFF101E30),onSurface=Color(0xFFE5F5FF))) {
-                Surface(Modifier.fillMaxSize(),color=MaterialTheme.colorScheme.background) {
-                    Column(Modifier.safeDrawingPadding().imePadding().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-                            Column { Text("AITRONICS",style=MaterialTheme.typography.headlineMedium,color=MaterialTheme.colorScheme.primary); Text(mode.uppercase() + if(apiKey.isBlank()) " · NO CLOUD KEY" else " · CLOUD CONFIGURED",style=MaterialTheme.typography.labelSmall) }
-                            TextButton(onClick={settings=true}) { Text("Settings") }
-                        }
-                        HorizontalDivider()
-                        LazyColumn(Modifier.weight(1f).fillMaxWidth(),reverseLayout=true,verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                        if(messages.isEmpty()) item {
-                            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                            Box(Modifier.fillMaxWidth().height(170.dp),contentAlignment=androidx.compose.ui.Alignment.Center) {
-                                androidx.compose.foundation.Canvas(Modifier.size(160.dp)) {
-                                    for(i in 1..5) drawCircle(Color(0xFF64E8FF).copy(alpha=0.18f+i*0.10f),radius=size.minDimension*i/12f,style=androidx.compose.ui.graphics.drawscope.Stroke(width=2f))
-                                    drawCircle(Color(0xFF176D91),radius=size.minDimension/5f)
-                                }
-                                Text("AI",color=Color.White,style=MaterialTheme.typography.headlineLarge)
+            MaterialTheme(colorScheme=darkColorScheme(primary=Mint,onPrimary=Night,background=Night,surface=Panel,onSurface=Color.White)) {
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF131D29),Night,Night)))) {
+                    Column(Modifier.safeDrawingPadding().imePadding().padding(horizontal=18.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                        AssistantHeader(when { mode=="Offline" -> "Offline assistant"; apiKey.isBlank() -> "On-device commands"; else -> "$mode · Cloud connected" }) { settings=true }
+                        HorizontalDivider(color=Edge)
+                        LazyColumn(Modifier.weight(1f).fillMaxWidth(),reverseLayout=true,verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                            if(messages.isEmpty()) item {
+                                HomePanel(BackgroundWake.running,wakePhrase,{ input="open camera";send() },{ input="battery level";send() })
                             }
-                            Text("How can I help?",style=MaterialTheme.typography.headlineSmall)
-                            Text("Ask a question or control supported phone functions.")
-                            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(onClick={input="open camera";send()}) { Text("Camera") }
-                                OutlinedButton(onClick={input="open settings";send()}) { Text("Phone settings") }
-                            }
-                        }
-                            }
-                            items(messages.reversed()) { item ->
-                                Card(shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=if(item.first=="user") Color(0xFF17405A) else Color(0xFF14263A))) {
-                                    Column(Modifier.fillMaxWidth().padding(14.dp)) { Text(if(item.first=="user") "YOU" else "AITRONICS",color=MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.labelSmall); Text(item.second) }
-                                }
-                            }
+                            items(messages.reversed()) { item -> ChatMessage(item.first=="user",item.second) }
                         }
                         if(listening) Text(if(wakeRequested) "Listening for “$wakePhrase” followed by a command" else "Listening…")
                         if(BackgroundWake.status.isNotEmpty() && BackgroundWake.enabled(this@MainActivity)) Text(BackgroundWake.status)
                         if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                        OutlinedTextField(input,{input=it},modifier=Modifier.fillMaxWidth(),placeholder={Text("Ask or enter a command")},maxLines=4,shape=RoundedCornerShape(20.dp))
+                        Surface(shape=RoundedCornerShape(24.dp),color=Panel) {
+                        Column(Modifier.padding(10.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                        OutlinedTextField(input,{input=it},modifier=Modifier.fillMaxWidth(),placeholder={Text("Message Aitronics…",color=Muted)},maxLines=4,shape=RoundedCornerShape(20.dp))
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                             OutlinedButton(onClick={listen(false)},enabled=!busy && !BackgroundWake.running) { Text(if(listening) "Stop" else "Voice") }
                             if (!listening) TextButton(onClick={backgroundWake()},enabled=!busy || BackgroundWake.running) { Text(if(BackgroundWake.running || BackgroundWake.enabled(this@MainActivity)) "Stop wake" else "Set up wake") }
                             Button(onClick={send()},enabled=!busy,modifier=Modifier.weight(1f)) { Text("Send") }
                         }
+                        } }
+                    }
+                    if(NeonBubble.enabled && NeonBubble.awake) {
+                        Box(Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top=70.dp,end=12.dp)) { Orb(72.dp,true) }
                     }
                 }
                 if(settings) {
@@ -385,6 +375,11 @@ class MainActivity : ComponentActivity() {
                     var error by remember { mutableStateOf(false) }
                     AlertDialog(onDismissRequest={settings=false},title={Text("Assistant settings")},text={
                         Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                            BubbleOptions(overlayAllowed,{show,pin -> NeonBubble.configure(this@MainActivity,show,pin)}) {
+                                val action=android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION
+                                if(!launch(Intent(action,Uri.parse("package:"+packageName)))) launch(Intent(action))
+                            }
+                            HorizontalDivider(color=Edge)
                             Text("Assistant mode")
                             Row(horizontalArrangement=Arrangement.spacedBy(4.dp)) {
                                 listOf("Auto","Offline","Online").forEach { option ->

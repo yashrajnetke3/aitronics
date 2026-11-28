@@ -22,3 +22,7 @@ Background recognition uses the bundled Vosk small US-English 0.15 model (Alpha 
 ### Commands while another app is open
 
 After hands-free setup, say **Hey** or **Hey AITRONICS**, followed by your command. Enable AITRONICS accessibility for screen commands. Say **Hey, close camera** to return Home from Camera, or **Hey, scroll down** in a scrollable app. To dictate, open WhatsApp or Telegram, then use **open chat with Sam** when that chat is visible, **write message I am on my way**, **read draft**, **send message**, and **confirm send**. Use the wake word for each command. Approval expires after 45 seconds and requires the same visible recipient and draft. If Android or the messaging app hides a required control, use the app’s native button.
+
+### Neon wake bubble
+
+The bubble is on by default. While hands-free listening runs, the pinned bubble stays visible while the phone is unlocked and pulses for four seconds when a wake phrase is recognized. To see it above another app, select **Settings → Allow bubble over other apps** and grant Android’s display permission. Turn off **Keep bubble visible** for a wake-only indicator, or turn off **Neon wake bubble** to hide the indicator while keeping voice commands active.

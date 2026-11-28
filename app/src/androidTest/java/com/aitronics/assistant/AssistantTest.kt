@@ -49,6 +49,9 @@ class AssistantTest {
         val permissions = mutableListOf(android.Manifest.permission.RECORD_AUDIO)
         if (android.os.Build.VERSION.SDK_INT >= 33) permissions += android.Manifest.permission.POST_NOTIFICATIONS
         for (permission in permissions) inst.uiAutomation.grantRuntimePermission(app.packageName, permission)
+        inst.uiAutomation.executeShellCommand("appops set " + app.packageName + " SYSTEM_ALERT_WINDOW allow").use {
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes()
+        }
         val service = android.content.Intent(app,BackgroundWake::class.java)
         try {
             BackgroundWake.enable(app,true)
@@ -57,6 +60,13 @@ class AssistantTest {
             ui.waitUntil(90000) { BackgroundWake.running && BackgroundWake.status.startsWith("Listening for") }
             inst.uiAutomation.executeShellCommand("input keyevent KEYCODE_HOME").close()
             ui.waitUntil(10000) { BackgroundWake.foregroundCommand == null }
+            ui.waitUntil(10000) { NeonBubble.overOtherApps }
+            inst.runOnMainSync { NeonBubble.configure(app,true,false) }
+            ui.waitUntil(5000) { !NeonBubble.overOtherApps }
+            inst.runOnMainSync { NeonBubble.wake() }
+            ui.waitUntil(5000) { NeonBubble.overOtherApps }
+            ui.waitUntil(8000) { !NeonBubble.overOtherApps }
+            inst.runOnMainSync { NeonBubble.configure(app,true,true) }
             org.junit.Assert.assertTrue(BackgroundWake.running)
             val manager = app.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             org.junit.Assert.assertTrue(manager.activeNotifications.any { n -> n.notification.actions?.any { it.title == "Stop" } == true })
@@ -86,6 +96,24 @@ class AssistantTest {
         org.junit.Assert.assertEquals("scroll down in WhatsApp",WakeCommands.normalize("whatapp scroll dow","hey aitronics"))
         org.junit.Assert.assertTrue(ScreenCommands.followUp("close camera"))
         org.junit.Assert.assertFalse(ScreenCommands.followUp("confirm send"))
+    }
+
+    @Test fun bubbleDefaultsAndPersistentSwitch() {
+        val app = ui.activity.applicationContext
+        ui.runOnIdle {
+            BackgroundWake.prefs(app).edit().remove("neonBubble").remove("pinNeonBubble").commit()
+            NeonBubble.load(app)
+        }
+        ui.onNodeWithText("Settings").performClick()
+        ui.onNodeWithContentDescription("Neon wake bubble").assertIsOn().performClick()
+        ui.onNodeWithContentDescription("Keep bubble visible").assertDoesNotExist()
+        ui.activityRule.scenario.recreate()
+        ui.onNodeWithText("Settings").performClick()
+        ui.onNodeWithContentDescription("Neon wake bubble").assertIsOff()
+        ui.runOnIdle { NeonBubble.wake(); org.junit.Assert.assertFalse(NeonBubble.awake) }
+        ui.onNodeWithContentDescription("Neon wake bubble").performClick()
+        ui.onNodeWithContentDescription("Keep bubble visible").assertIsOn()
+        ui.runOnIdle { NeonBubble.wake(); org.junit.Assert.assertTrue(NeonBubble.awake); NeonBubble.configure(app,false,true); NeonBubble.configure(app,true,true) }
     }
 
     @Test fun deviceCommandsWithoutCloudKey() {

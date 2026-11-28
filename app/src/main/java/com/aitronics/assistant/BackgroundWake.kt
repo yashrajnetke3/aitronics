@@ -137,7 +137,7 @@ class BackgroundWake : Service() {
                 check(mic.state == AudioRecord.STATE_INITIALIZED)
                 mic.startRecording()
                 check(mic.recordingState == AudioRecord.RECORDSTATE_RECORDING)
-                handler.post { if (live) update("Listening for “$phrase”") }
+                handler.post { if (live) { update("Listening for “$phrase”"); NeonBubble.attach(this) } }
                 val samples = ShortArray(1600)
                 var discarding = false
                 while(live) {
@@ -170,6 +170,7 @@ class BackgroundWake : Service() {
         triggeredUntil = if (command.isBlank()) now + 10000 else 0
         val locked = (getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager).isDeviceLocked
         if (locked) { triggeredUntil = 0; followUntil = 0; update("Unlock your phone to give a command."); return }
+        if(tail != null) NeonBubble.wake()
         val normalized = WakeCommands.normalize(command,phrase)
         followUntil = if (normalized.startsWith("open ",true) || ScreenCommands.handles(normalized)) now + 15000 else 0
         if (normalized.isNotBlank()) {
@@ -196,6 +197,7 @@ class BackgroundWake : Service() {
         } }
     }
     override fun onDestroy() {
+        NeonBubble.detach()
         live = false; running = false; pending = null
         speaker?.shutdown(); handler.removeCallbacksAndMessages(null)
         stopForeground(STOP_FOREGROUND_REMOVE)
