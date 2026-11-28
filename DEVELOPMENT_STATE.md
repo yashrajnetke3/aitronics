@@ -1,6 +1,18 @@
 # AITRONICS development checkpoint
 
-## Current verified release checkpoint
+## Current verified checkpoint
+
+[AITRONICS 0.13, build 48](https://github.com/yashrajnetke3/aitronics/actions/runs/46175782180) passed at c61faa94da10232bc630fcd633725e0fc9909acc. Android 15 completed 24 tests and Android 16 completed three targeted tests. Build 47 lost its emulator during the wake test. Build 48 completed the full Android 15 run including that test.
+
+APK SHA-256: d9b1ac51fde0d05ff9a3bf81301b656b3abcddf4622e90478d83198ef45f8877. Size 145755361 bytes. Debug signer SHA-256: 76441030229b057cd4eaf3bd6bdb4fdb0705e5a3d3213b3beb3c8eebce824932. Its certificate differs from the 0.12 test build.
+
+- [x] Offline chat streams native model output and supports Stop reply. The real-model test downloads the model, checks its answer, stops another request, then verifies the composer accepts a new command.
+- [x] Only completed local turns enter a four-turn volatile context. Fit recent whole turns into a 320-token prompt budget using the loaded model tokenizer. Clearing the conversation clears local context.
+- [x] Settings → Analyze BOM CSV opens Android's document picker. Local parsing covers quoted UTF-8 CSV, exact decimal aggregation, distinct part/unit groups, malformed input and size limits. Real supplier file and handset picker testing remain open.
+- [ ] Next independent manufacturing checkpoint: compare two user-selected BOM revisions and report added, removed and quantity-changed part/unit groups.
+- [ ] Samsung acoustic wake, real messaging interfaces, authorized live cloud inference and signed in-place upgrade remain external checks. Vision, connected-device and BCI development are outstanding.
+
+## Verified 0.12 checkpoint
 
 [AITRONICS 0.12, build 46](https://github.com/yashrajnetke3/aitronics/actions/runs/46173958311) passed at 45ac2d8cbb4ee6b5878795590fa9f1ef5a8ac804. Android 15 ran 21 instrumentation tests, including real model download/inference, document-picker cancellation, privacy filters, failed writes and interrupted model transfers. Android 16 ran three targeted speech-routing, camera-command and permission-feedback tests. Lint, assemble and APK signature verification passed.
 
