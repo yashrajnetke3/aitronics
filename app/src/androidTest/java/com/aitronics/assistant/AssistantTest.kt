@@ -116,6 +116,15 @@ class AssistantTest {
         ui.runOnIdle { NeonBubble.wake(); org.junit.Assert.assertTrue(NeonBubble.awake); NeonBubble.configure(app,false,true); NeonBubble.configure(app,true,true) }
     }
 
+    @Test fun composerReservesSpaceForSend() {
+        ui.onNodeWithText("Send").assertIsDisplayed().assertIsNotEnabled()
+        ui.onNode(hasSetTextAction()).performTextInput("battery level")
+        ui.onNodeWithText("Send").assertIsEnabled()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        ui.onNodeWithText("Send",useUnmergedTree=true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        org.junit.Assert.assertEquals(1,layouts.single().lineCount)
+    }
+
     @Test fun deviceCommandsWithoutCloudKey() {
         send("battery level")
         waitForReply("Battery level:")

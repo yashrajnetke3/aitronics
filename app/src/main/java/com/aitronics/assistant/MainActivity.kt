@@ -345,26 +345,27 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme=darkColorScheme(primary=Mint,onPrimary=Night,background=Night,surface=Panel,onSurface=Color.White)) {
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF131D29),Night,Night)))) {
                     Column(Modifier.safeDrawingPadding().imePadding().padding(horizontal=18.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                        AssistantHeader(when { mode=="Offline" -> "Offline assistant"; apiKey.isBlank() -> "On-device commands"; else -> "$mode · Cloud connected" }) { settings=true }
+                        AssistantHeader(when { mode=="Offline" -> "Offline assistant"; apiKey.isBlank() -> "On-device commands"; else -> "$mode · Cloud configured" }) { settings=true }
                         HorizontalDivider(color=Edge)
-                        LazyColumn(Modifier.weight(1f).fillMaxWidth(),reverseLayout=true,verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                            if(messages.isEmpty()) item {
-                                HomePanel(BackgroundWake.running,wakePhrase,{ input="open camera";send() },{ input="battery level";send() })
+                        if (messages.isEmpty()) {
+                            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                                val orbSize = (maxHeight * .42f).coerceIn(72.dp,170.dp)
+                                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                                    verticalArrangement=Arrangement.Center) {
+                                    HomePanel(BackgroundWake.running,wakePhrase,orbSize,{ input="open camera";send() },{ input="battery level";send() })
+                                }
                             }
+                        } else LazyColumn(Modifier.weight(1f).fillMaxWidth(),reverseLayout=true,verticalArrangement=Arrangement.spacedBy(8.dp)) {
                             items(messages.reversed()) { item -> ChatMessage(item.first=="user",item.second) }
                         }
                         if(listening) Text(if(wakeRequested) "Listening for “$wakePhrase” followed by a command" else "Listening…")
                         if(BackgroundWake.status.isNotEmpty() && BackgroundWake.enabled(this@MainActivity)) Text(BackgroundWake.status)
                         if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                        Surface(shape=RoundedCornerShape(24.dp),color=Panel) {
-                        Column(Modifier.padding(10.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                        OutlinedTextField(input,{input=it},modifier=Modifier.fillMaxWidth(),placeholder={Text("Message Aitronics…",color=Muted)},maxLines=4,shape=RoundedCornerShape(20.dp))
-                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                            OutlinedButton(onClick={listen(false)},enabled=!busy && !BackgroundWake.running) { Text(if(listening) "Stop" else "Voice") }
-                            if (!listening) TextButton(onClick={backgroundWake()},enabled=!busy || BackgroundWake.running) { Text(if(BackgroundWake.running || BackgroundWake.enabled(this@MainActivity)) "Stop wake" else "Set up wake") }
-                            Button(onClick={send()},enabled=!busy,modifier=Modifier.weight(1f)) { Text("Send") }
-                        }
-                        } }
+                        CommandComposer(
+                            input=input, change={input=it}, send=::send, voice={listen(false)}, wake=::backgroundWake,
+                            listening=listening, busy=busy, wakeRunning=BackgroundWake.running,
+                            wakeEnabled=BackgroundWake.enabled(this@MainActivity)
+                        )
                     }
                     if(NeonBubble.enabled && NeonBubble.awake) {
                         Box(Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top=70.dp,end=12.dp)) { Orb(72.dp,true) }

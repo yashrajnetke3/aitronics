@@ -41,16 +41,16 @@ val Edge = Color(0xFF30394A)
     }
 }
 
-@Composable fun HomePanel(wake:Boolean, phrase:String, camera:()->Unit,battery:()->Unit) {
+@Composable fun HomePanel(wake:Boolean, phrase:String, orbSize:Dp, camera:()->Unit,battery:()->Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(
         Brush.linearGradient(listOf(Color(0xFF172D35),Color(0xFF18263D),Color(0xFF251E39))))
         .border(1.dp,Edge,RoundedCornerShape(28.dp)).padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        Box(Modifier.fillMaxWidth(),contentAlignment=Alignment.Center){Orb(150.dp,NeonBubble.awake)}
+        Box(Modifier.fillMaxWidth(),contentAlignment=Alignment.Center){Orb(orbSize,NeonBubble.awake)}
         Text(if(wake) "Ready when you are" else "How can I help?",color=Color.White,fontWeight=FontWeight.SemiBold,fontSize=28.sp,lineHeight=34.sp)
         Text(if(wake) "Say “$phrase” and give a command." else "Speak a command or type below.",color=Muted,fontSize=15.sp)
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick=camera,border=BorderStroke(1.dp,Edge)) { Text("Open camera",color=Color.White) }
-            OutlinedButton(onClick=battery,border=BorderStroke(1.dp,Edge)) { Text("Battery level",color=Color.White) }
+            OutlinedButton(onClick=camera,contentPadding=PaddingValues(horizontal=13.dp),border=BorderStroke(1.dp,Edge)) { Text("Open camera",color=Color.White) }
+            OutlinedButton(onClick=battery,contentPadding=PaddingValues(horizontal=13.dp),border=BorderStroke(1.dp,Edge)) { Text("Battery",color=Color.White) }
         }
     }
 }
@@ -78,5 +78,31 @@ val Edge = Color(0xFF30394A)
             Switch(modifier=Modifier.semantics { contentDescription="Keep bubble visible" },checked=NeonBubble.pinned,onCheckedChange={configure(true,it)})
         }
         TextButton(onClick=permission) { Text(if(overlay) "Manage display over other apps" else "Allow bubble over other apps") }
+    }
+}
+
+@Composable fun CommandComposer(
+    input:String,change:(String)->Unit,send:()->Unit,voice:()->Unit,wake:()->Unit,
+    listening:Boolean,busy:Boolean,wakeRunning:Boolean,wakeEnabled:Boolean
+) {
+    Surface(shape=RoundedCornerShape(22.dp),color=Panel,border=BorderStroke(1.dp,Edge)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal=10.dp,vertical=5.dp)) {
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                TextField(input,change,modifier=Modifier.weight(1f),
+                    placeholder={Text("Ask Aitronics",color=Muted)},maxLines=4,
+                    colors=TextFieldDefaults.colors(focusedContainerColor=Panel,unfocusedContainerColor=Panel,
+                        focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent))
+                Button(onClick=send,enabled=!busy && input.isNotBlank(),contentPadding=PaddingValues(horizontal=16.dp)) {
+                    Text("Send",maxLines=1,softWrap=false)
+                }
+            }
+            HorizontalDivider(color=Edge)
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
+                TextButton(onClick=voice,enabled=!busy && !wakeRunning) { Text(if(listening) "Stop voice" else "Voice input") }
+                if(!listening) TextButton(onClick=wake,enabled=!busy || wakeRunning) {
+                    Text(if(wakeRunning || wakeEnabled) "Stop wake" else "Set up wake")
+                }
+            }
+        }
     }
 }
