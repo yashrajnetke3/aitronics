@@ -30,6 +30,30 @@ class AssistantTest {
         }
     }
 
+    @Test fun cancellingDocumentPickerLeavesNoteIntact() {
+        val inst = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        val dao = MemoryDatabase.get(inst.targetContext).notes()
+        val body = "export cancellation " + java.util.UUID.randomUUID()
+        dao.add(Memory(note = body))
+        val note = dao.records().first { NoteCipher.decrypt(it.note) == body }
+        try {
+            send("export memory " + note.id)
+            ui.waitUntil(10000) {
+                inst.uiAutomation.rootInActiveWindow?.findAccessibilityNodeInfosByText("Choose destination")
+                    ?.firstOrNull()?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK) == true
+            }
+            ui.waitUntil(10000) {
+                val pkg = inst.uiAutomation.rootInActiveWindow?.packageName?.toString()
+                pkg != null && pkg != inst.targetContext.packageName
+            }
+            inst.uiAutomation.executeShellCommand("input keyevent KEYCODE_BACK").use {
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes()
+            }
+            waitForReply("Export cancelled.")
+            org.junit.Assert.assertEquals(note, dao.snapshot(note.id))
+        } finally { dao.deleteIfCurrent(note.id, note.note) }
+    }
+
     @Test fun memoryRoundTripFromChat() {
         send("remember shift at nine")
         waitForReply("Saved to local memory.")
@@ -262,6 +286,13 @@ class AssistantTest {
             if (previous == null) edit.remove("saveHistory") else edit.putBoolean("saveHistory", previous)
             edit.commit()
         }
+    }
+
+    @Test fun sensitivePreviewsAndAuthenticationLabelsAreExcluded() {
+        for (value in listOf("Your OTP", "Code 482913", "Enter your passcode", "one-time password", "PIN")) {
+            org.junit.Assert.assertTrue(value, PrivateContent.omitPreview(value))
+        }
+        org.junit.Assert.assertFalse(PrivateContent.omitPreview("Production shift starts at nine"))
     }
 
     @Test fun deviceChecksValidateTheWholePlan() {

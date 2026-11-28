@@ -10,6 +10,21 @@ import java.util.UUID
 class MemoryMigrationTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
+    @Test fun exportWritesOnlyReviewedContentAndReportsFailedWrites() {
+        val note = Memory(7, NoteCipher.encrypt("शिफ्ट २"))
+        val reviewed = MemoryExport.digest(note)
+        val output = java.io.ByteArrayOutputStream()
+        assertEquals("Memory exported.", MemoryExport.writeReviewed(note, reviewed) { output })
+        assertEquals("शिफ्ट २", output.toString("UTF-8"))
+        for (item in listOf(null, note.copy(note = NoteCipher.encrypt("changed")))) {
+            assertTrue(MemoryExport.writeReviewed(item, reviewed) { error("must not open") }.contains("changed"))
+        }
+        assertTrue(runCatching { MemoryExport.writeReviewed(note, reviewed) { null } }.isFailure)
+        assertTrue(runCatching { MemoryExport.writeReviewed(note, reviewed) {
+            object : java.io.OutputStream() { override fun write(b: Int) { throw java.io.IOException("full") } }
+        } }.isFailure)
+    }
+
     @Test fun legacyNotesSurviveMigrationFailureAndRetry() {
         val name = "memory-test-" + UUID.randomUUID()
         fun open() = Room.databaseBuilder(context, MemoryDatabase::class.java, name)

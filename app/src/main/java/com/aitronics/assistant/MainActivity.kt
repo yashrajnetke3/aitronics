@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
     private val messages = mutableStateListOf<Pair<String,String>>()
     private var tts: TextToSpeech? = null
     private var speechReady = false
+    private val memoryExport = MemoryExport(this, ::answer)
     private val voice = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
             val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
@@ -265,7 +266,7 @@ class MainActivity : ComponentActivity() {
         runCatching { deviceCommand(q) }.getOrElse { "Device action unavailable or permission denied." }?.let { answer(it); return }
         val lower = q.lowercase()
         if (lower == "help") {
-            answer("Try Hey, open WhatsApp; open chat with Sam; write message I am on my way; read draft; send message; confirm send; scroll down; close camera; battery level, volume up, read screen, scroll down, dial 12345, message 12345, summarize notifications, remember my shift starts at nine, recall memory, or remind me in 10 minutes to check the line.")
+            answer("Try Hey, open WhatsApp; open chat with Sam; write message I am on my way; read draft; send message; confirm send; scroll down; close camera; battery level, volume up, read screen, scroll down, dial 12345, message 12345, summarize notifications, remember my shift starts at nine, recall memory, export memory 3, or remind me in 10 minutes to check the line.")
             return
         }
         if (lower.startsWith("remember ")) { memory { it.add(Memory(note=q.substringAfter(' ').take(4000))); "Saved to local memory." }; return }
@@ -274,6 +275,7 @@ class MainActivity : ComponentActivity() {
                 .ifBlank { "No saved memories." } }
             return
         }
+        if (lower == "export memory" || lower.startsWith("export memory ")) { memoryExport.start(lower); return }
         if (MemoryReview.handles(q)) { MemoryReview.open(this, q, ::answer); return }
         if (lower == "forget all memories") {
             android.app.AlertDialog.Builder(this).setMessage("Delete all saved memories?").setNegativeButton("Cancel",null)
@@ -353,6 +355,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        memoryExport.restore(savedInstanceState)
         pendingQuestion=savedInstanceState?.getString("pendingQuestion").orEmpty()
         seenCompletion=savedInstanceState?.getInt("seenCompletion") ?: LocalModel.completion
         NeonBubble.load(this)
@@ -463,6 +466,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onSaveInstanceState(state: Bundle) {
         super.onSaveInstanceState(state)
+        memoryExport.save(state)
         state.putString("pendingQuestion",pendingQuestion)
         state.putInt("seenCompletion",seenCompletion)
     }

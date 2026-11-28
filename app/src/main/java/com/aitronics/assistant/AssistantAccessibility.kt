@@ -15,13 +15,17 @@ class AssistantAccessibility : AccessibilityService() {
         val root = rootInActiveWindow ?: return "No accessible screen."
         val output = mutableListOf<String>()
         var visited = 0
+        var restrictedScreen = false
         fun walk(node: AccessibilityNodeInfo, depth: Int) {
-            if(depth > 30 || visited++ >= 500 || node.isPassword || !node.isVisibleToUser) return
+            if (restrictedScreen || depth > 30 || visited++ >= 500 || !node.isVisibleToUser) return
+            if (PrivateContent.protectedNode(node)) { restrictedScreen = true; return }
             val label = node.text?.toString() ?: node.contentDescription?.toString()
-            if(!label.isNullOrBlank()) output.add(label.take(200))
+            if (PrivateContent.restricted(label)) { restrictedScreen = true; return }
+            if (!label.isNullOrBlank() && !PrivateContent.omitPreview(label)) output.add(label.take(200))
             for(i in 0 until node.childCount) node.getChild(i)?.let { walk(it,depth+1) }
         }
         walk(root,0)
+        if (restrictedScreen) return "Sensitive screen. Use the open app directly."
         return output.distinct().joinToString("\n").take(3000).ifBlank { "No readable screen text." }
     }
     fun scroll(forward: Boolean): Boolean {
@@ -36,3 +40,4 @@ class AssistantAccessibility : AccessibilityService() {
         return walk(root,0)
     }
 }
+

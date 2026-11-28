@@ -54,6 +54,7 @@ class AssistantNotificationListener : NotificationListenerService() {
                 val extras = item.notification.extras
                 val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
                 val body = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+                if (listOfNotNull(title, body).any(PrivateContent::omitPreview)) return@mapNotNull null
                 listOfNotNull(title, body).filter { it.isNotBlank() }.distinct().joinToString(" — ").take(240).ifEmpty { null }
             }
             return previews.joinToString("\n\n").ifBlank { "There are no readable notification previews." }

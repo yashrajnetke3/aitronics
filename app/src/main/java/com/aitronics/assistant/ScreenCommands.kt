@@ -30,7 +30,7 @@ object ScreenCommands {
         val queue = ArrayDeque<Node>(); queue.add(root)
         while(queue.isNotEmpty() && result.size < 600) {
             val n = queue.removeFirst()
-            if(n.isPassword) continue
+            if(PrivateContent.protectedNode(n)) continue
             if(n.isVisibleToUser) result.add(n)
             for(i in 0 until n.childCount) if(queue.size < 600) n.getChild(i)?.let(queue::addLast)
         }

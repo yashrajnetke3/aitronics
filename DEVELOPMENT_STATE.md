@@ -41,10 +41,10 @@ The last green baseline before this cycle was [run 35](https://github.com/yashra
 
 ## Resume independently of physical testing
 
-- [ ] Implement user-authorized export for selected encrypted notes using the Android document picker. Cover cancellation, output failure and selection changes.
-- [ ] Extend the privacy audit to sensitive accessibility nodes and notification previews before adding broader screen analysis.
+- [x] Export a selected note with “export memory NUMBER”. Confirm the plaintext preview and use the Android document picker. Recheck ciphertext before opening the destination. Unit-level instrumentation covers stale/deleted selections, output failure and Unicode export.
+- [x] Exclude visible password and Android sensitivity-marked nodes, common authentication labels, and notification previews containing standalone 4–8 digit codes. Screen reading stops on a protected node. Heuristics are conservative; custom controls and multilingual labels require physical testing.
 - [ ] For hands-free testing, open Set up wake, allow microphone and notifications, and enable Settings → Allow bubble over other apps. Keep bubble visible controls the idle orb. The Stop notification action disables wake listening.
 
 ## Voice regression cycle for 0.11
 
-Local decoding of 16 kHz mono Flite speech using the English model extracted from the distributed 0.10 APK reproduced missed wake and camera/battery commands. Handle the observed long wake and action transcriptions. Test fixtures contain synthetic speech exclusively, packaged only in the instrumentation APK. Exercise real Vosk decoding for long/short wake, camera, battery and a negative control; also exercise missing-app and disabled-accessibility feedback. Run the full API 35 suite and targeted API 36 cases. Single-word wake remains speaker dependent: one synthesized “hey” decoded as “they”; that ambiguous word deliberately remains ineligible for activation.
+Local decoding of 16 kHz mono Flite speech using the English model extracted from the distributed 0.10 APK reproduced missed wake and camera/battery commands. Handle the observed long wake and action transcriptions. Test fixtures contain synthetic speech exclusively, packaged only in the instrumentation APK. Exercise real Vosk decoding for long/short wake, camera, battery and a negative control; also exercise missing-app and disabled-accessibility feedback. Build 43 passed the full API 35 suite and targeted API 36 cases. Single-word wake remains speaker dependent: one synthesized “hey” decoded as “they”; that ambiguous word deliberately remains ineligible for activation.
