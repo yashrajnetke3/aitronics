@@ -52,3 +52,7 @@ Local decoding of 16 kHz mono Flite speech using the English model extracted fro
 ## Hybrid chat recovery
 
 Auto mode checks for an active internet-capable network before selecting the cloud. A connection error, timeout or transient server error can fall back to an installed local model. Authentication failures remain visible. Offline and keyless paths avoid a network check. Live paid cloud inference requires an authorized API key.
+
+## Offline model transfer
+
+The pinned model download keeps a private partial file across network loss or pause. A compatible server resumes at the saved offset. A full HTTP 200 response restarts safely. Length and SHA-256 of the entire file are checked before activation. Cancel removes the partial. Tests cover short reads, invalid ranges, resume, server restart and corrupt data. Import and existing installed model selection stay independent.

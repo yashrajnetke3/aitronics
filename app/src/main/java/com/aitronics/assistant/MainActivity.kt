@@ -414,7 +414,10 @@ class MainActivity : ComponentActivity() {
                         if(BackgroundWake.status.isNotEmpty() && BackgroundWake.enabled(this@MainActivity)) Text(BackgroundWake.status)
                         if(LocalModel.downloading) {
                             Text(if(LocalModel.progress < 100) "Downloading offline AI · ${LocalModel.progress}%" else "Preparing the answer model…")
-                            if(LocalModel.progress < 100) TextButton(onClick={LocalModel.cancelDownload()}) { Text("Cancel download") }
+                            if(LocalModel.progress < 100) Row {
+                                TextButton(onClick={LocalModel.pauseDownload()}) { Text("Pause") }
+                                TextButton(onClick={LocalModel.cancelDownload()}) { Text("Cancel download") }
+                            }
                         } else if(pendingQuestion.isNotBlank() && !busy) {
                             if(mode!="Offline") TopicLookup.topic(pendingQuestion)?.let { topic ->
                                 TextButton(onClick={lookUp(topic)}) { Text("Look up on Wikipedia") }

@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.*
 import java.net.URL
-import java.security.MessageDigest
 import javax.net.ssl.HttpsURLConnection
 import android.os.Handler
 import android.os.Looper
@@ -74,38 +73,33 @@ object LocalModel {
     var downloadMessage by mutableStateOf(""); private set
     var completion by mutableIntStateOf(0); private set
     @Volatile private var cancelled = false
+    @Volatile private var paused = false
+    fun pauseDownload() { paused = true }
     fun cancelDownload() { cancelled = true }
+    private fun partial(app: Context) = File(app.noBackupFilesDir, "qwen-${sha}.partial")
     fun download(context: Context) {
         if (downloading) return
-        cancelled=false; progress=0; downloadMessage=""; downloading=true
-        perform(context,"Could not finish the download or open the model. Check free space, internet access and device compatibility.",{ result ->
-            downloading=false; downloadMessage=if(cancelled) "Download cancelled." else result; completion++
+        cancelled=false; paused=false; progress=0; downloadMessage=""; downloading=true
+        perform(context,"Download incomplete. Check storage and internet access, then tap download to retry.",{ result ->
+            downloading=false; downloadMessage=result; completion++
         }) { app ->
-            if (app.noBackupFilesDir.usableSpace < bytes + 128L*1024*1024) return@perform "Free at least 700 MB on your phone, then retry."
-            install(app) { file ->
-                val connection = URL(source).openConnection() as HttpsURLConnection
-                connection.connectTimeout=20000; connection.readTimeout=30000
-                try {
-                    val digest=MessageDigest.getInstance("SHA-256")
-                    connection.inputStream.use { input -> file.outputStream().use { output ->
-                        val buffer=ByteArray(256*1024)
-                        var total=0L; var previous=-1
-                        while(true) {
-                            check(!cancelled)
-                            val count=input.read(buffer)
-                            if(count<0) break
-                            total+=count
-                            require(total<=bytes)
-                            output.write(buffer,0,count); digest.update(buffer,0,count)
-                            val pct=(100*total/bytes).toInt()
-                            if(pct!=previous) { previous=pct; main.post { progress=pct } }
-                        }
-                        check(total==bytes)
-                        output.fd.sync()
-                    } }
-                    check(digest.digest().joinToString("") { "%02x".format(it) } == sha)
-                    check(!cancelled)
-                } finally { connection.disconnect() }
+            val pending = partial(app)
+            try {
+                ModelTransfer.download(pending, bytes, sha, { offset ->
+                    (URL(source).openConnection() as HttpsURLConnection).apply {
+                        connectTimeout=20000; readTimeout=30000
+                        setRequestProperty("Accept-Encoding", "identity")
+                        if (offset > 0) setRequestProperty("Range", "bytes=$offset-")
+                    }
+                }, { cancelled || paused }, { percent -> main.post { progress=percent } })
+                if (cancelled || paused) throw InterruptedException()
+                install(app) { candidate ->
+                    Files.move(pending.toPath(), candidate.toPath(), StandardCopyOption.ATOMIC_MOVE)
+                }
+            } catch (stop: InterruptedException) {
+                if (cancelled) "Download cancelled." else "Download paused. Tap download to resume."
+            } finally {
+                if (cancelled) Files.deleteIfExists(pending.toPath())
             }
         }
     }
@@ -162,6 +156,7 @@ object LocalModel {
     fun delete(context: Context, reply: (String) -> Unit) {
         perform(context, "Could not remove all model files. Try deleting again.", reply) { app ->
             val root = directory(app)
+            Files.deleteIfExists(partial(app).toPath())
             Files.deleteIfExists(File(root, "selected").toPath())
             if (root.exists() && !root.deleteRecursively()) throw IOException("Could not remove model files")
             "On-device model removed."
