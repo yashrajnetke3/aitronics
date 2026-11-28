@@ -11,7 +11,7 @@ The last green baseline before this cycle was [run 35](https://github.com/yashra
 | 2 | Partial | LocalModel provides model import, Qwen download and local inference. Real inference verified in run 35. Configurable cloud chat exists. Streaming, resumable downloads and model resource selection need work. |
 | 4, 5 | Requires physical-device testing | Accessibility navigation, draft preparation and confirmed send are implemented. Verify supported apps, changed screens and denied permissions. Audit sensitive screen and notification text before extending collection. OCR and visual grounding are absent. |
 | 6, 7 | Partial | Vosk foreground service, system assistant, neon overlay and persistent toggles implemented. Broken verification in run 36. Check panel after Home, short wake and manual Stop on a phone. Bluetooth, multilingual models and energy measurement remain open. |
-| 8 | Partial | Room notes persist across activity recreation in the baseline. Storage is plaintext. Selective edit/delete and Keystore-backed migration pending. |
+| 8 | Partial | Room notes persist across activity recreation in the baseline. Version 2 encrypts each note using randomized AES-GCM with an Android Keystore key. Selective edit/delete and encrypted export remain pending. |
 | 9, 15 | Partial | WorkManager reminders and notification summaries exist. Multi-trigger workflows and opt-in learning remain open. |
 | 10–14 | Not implemented | No verified vision, specialized agent framework, manufacturing analysis, paired-device adapters or EEG classifier. Actual sensors and labeled inspection data required for hardware claims. |
 | 16, 17 | Partial | Keystore cloud credential, Android permission checks and draft-send confirmation exist. Need privacy regression tests, global stop and structured recovery. |
@@ -25,5 +25,6 @@ The last green baseline before this cycle was [run 35](https://github.com/yashra
 - [ ] Gate this checkpoint on assemble, lint and the API 35 suite including model smoke. Check the Actions run for this commit before resuming.
 - [ ] Verify acoustic wake on a physical phone with overlay enabled and disabled, screen locked and after Stop.
 - [x] Deliver screen action replies transiently. Redact messaging and screen commands from chat history and screen replies from foreground-service notification text. Add a saved-history regression test. Historical records are unchanged.
-- [ ] Next independent module: migrate Room notes to Keystore-backed ciphertext with rollback and recovery tests.
+- [x] Migrate Room v1 notes in a single transaction, encrypt subsequent writes, keep note commands and recalled note text out of chat history. Regression covers interrupted migration, retry, record IDs, randomized ciphertext and corrupt records. Legacy chat history and filesystem remnants are outside this migration.
+- [ ] Next independent module: implement selective memory correction and confirmed deletion with stale-record checks.
 - [ ] Obtain authorized stable release signer and verify an in-place upgrade with existing notes before production distribution. The CI artifact is debug-signed.

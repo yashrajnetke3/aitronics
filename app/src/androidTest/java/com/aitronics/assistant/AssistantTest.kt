@@ -23,18 +23,25 @@ class AssistantTest {
         }
     }
 
+    private fun assertMemoryVisible(note: String) {
+        val automation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+        ui.waitUntil(10000) {
+            automation.rootInActiveWindow?.findAccessibilityNodeInfosByText(note)?.isNotEmpty() == true
+        }
+    }
+
     @Test fun memoryRoundTripFromChat() {
         send("remember shift at nine")
         waitForReply("Saved to local memory.")
         send("recall memory")
-        ui.waitUntil(10000) { ui.onAllNodesWithText("shift at nine", substring = true).filter(hasText("remember shift at nine").not()).fetchSemanticsNodes().isNotEmpty() }
+        assertMemoryVisible("shift at nine")
     }
     @Test fun notesSurviveActivityRecreation() {
         send("remember pilot run at noon")
         waitForReply("Saved to local memory.")
         ui.activityRule.scenario.recreate()
         send("recall memory")
-        waitForReply("pilot run at noon")
+        assertMemoryVisible("pilot run at noon")
     }
     @Test fun spokenAliases() {
         org.junit.Assert.assertEquals("turn on flashlight",WakeCommands.normalize("hay open light","hey aitronics"))

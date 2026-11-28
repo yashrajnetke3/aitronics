@@ -87,11 +87,18 @@ class MainActivity : ComponentActivity() {
         wakeRequested = wake
         micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
     }
-    private fun memory(action: (MemoryDao) -> String) {
+    private fun memory(privateReply: Boolean = false, action: (MemoryDao) -> String) {
         busy = true
         MemoryDatabase.executor.execute {
             val reply = runCatching { action(MemoryDatabase.get(applicationContext).notes()) }.getOrDefault("Could not access local memory.")
-            runOnUiThread { busy = false; if (!isDestroyed) answer(reply) }
+            runOnUiThread {
+                busy = false
+                if (!isDestroyed) {
+                    if (privateReply) android.app.AlertDialog.Builder(this)
+                        .setTitle("Personal memory").setMessage(reply).setPositiveButton("Close", null).show()
+                    else answer(reply)
+                }
+            }
         }
     }
     private val chooseModel = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -254,7 +261,7 @@ class MainActivity : ComponentActivity() {
         keyboard.hideSoftInputFromWindow(window.decorView.windowToken, 0)
         input = ""
         val privateCommand = ScreenCommands.handles(q) || q.equals("read screen", true) || q.startsWith("message ",true)
-        messages.add("user" to if (privateCommand) "Device command" else q)
+        messages.add("user" to when { privateCommand -> "Device command"; q.startsWith("remember ",true) -> "Save personal memory"; else -> q })
         runCatching { deviceCommand(q) }.getOrElse { "Device action unavailable or permission denied." }?.let { answer(it); return }
         val lower = q.lowercase()
         if (lower == "help") {
@@ -262,7 +269,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (lower.startsWith("remember ")) { memory { it.add(Memory(note=q.substringAfter(' ').take(4000))); "Saved to local memory." }; return }
-        if (lower == "recall memory") { memory { it.recent().joinToString("\n").ifBlank { "No saved memories." } }; return }
+        if (lower == "recall memory") { memory(privateReply = true) { it.recent().joinToString("\n").ifBlank { "No saved memories." } }; return }
         if (lower == "forget all memories") {
             android.app.AlertDialog.Builder(this).setMessage("Delete all saved memories?").setNegativeButton("Cancel",null)
                 .setPositiveButton("Delete") { _, _ -> memory { it.clear(); "Memories deleted." } }.show()
