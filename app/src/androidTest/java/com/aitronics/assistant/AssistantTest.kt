@@ -73,6 +73,18 @@ class AssistantTest {
         ui.waitUntil(10000) { !BackgroundWake.running }
     }
 
+    @Test fun shortWakeAndChatCommands() {
+        org.junit.Assert.assertEquals("", WakeCommands.afterWake("hey", "hey aitronics"))
+        org.junit.Assert.assertEquals("close camera", WakeCommands.afterWake("hey close camera", "hey aitronics"))
+        org.junit.Assert.assertNull(WakeCommands.afterWake("they open camera", "hey aitronics"))
+        org.junit.Assert.assertNull(WakeCommands.afterWake("hey", "hello computer"))
+        org.junit.Assert.assertEquals("open Telegram", WakeCommands.normalize("open teligaram","hey aitronics"))
+        org.junit.Assert.assertEquals("open WhatsApp", WakeCommands.normalize("open whatapp","hey aitronics"))
+        for (q in listOf("close camera","scroll down","open chat with Sam","write message Good morning","read draft","send message","confirm send"))
+            org.junit.Assert.assertTrue(ScreenCommands.handles(q))
+        org.junit.Assert.assertFalse(ScreenCommands.handles("message 12345 saying Hi"))
+    }
+
     @Test fun deviceCommandsWithoutCloudKey() {
         send("battery level")
         waitForReply("Battery level:")

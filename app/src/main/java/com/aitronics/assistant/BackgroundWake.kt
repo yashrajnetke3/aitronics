@@ -59,6 +59,7 @@ class BackgroundWake : Service() {
     private var triggeredUntil = 0L
     private var phrase = "hey aitronics"
     private var speaker: TextToSpeech? = null
+    @Volatile private var suppressAudioUntil = 0L
     private var speechReady = false
     private val notifications get() = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
     override fun onBind(intent: Intent?) = null
@@ -137,9 +138,16 @@ class BackgroundWake : Service() {
                 check(mic.recordingState == AudioRecord.RECORDSTATE_RECORDING)
                 handler.post { if (live) update("Listening for “$phrase”") }
                 val samples = ShortArray(1600)
+                var discarding = false
                 while(live) {
                     val count = mic.read(samples,0,samples.size)
                     check(count > 0)
+                    if (speaker?.isSpeaking == true || SystemClock.elapsedRealtime() < suppressAudioUntil) {
+                        if (!discarding) decoder.reset()
+                        discarding = true
+                        continue
+                    }
+                    if (discarding) { decoder.reset(); discarding = false }
                     if (decoder.acceptWaveForm(samples,count)) {
                         val words = JSONObject(decoder.result).optString("text")
                         if (words.isNotBlank()) handler.post { if (live) heard(words) }
@@ -149,6 +157,7 @@ class BackgroundWake : Service() {
         } }
     }
     private fun heard(words: String) {
+        if (speaker?.isSpeaking == true) return
         val now = SystemClock.elapsedRealtime()
         val tail = WakeCommands.afterWake(words,phrase)
         val command = when {
@@ -161,10 +170,17 @@ class BackgroundWake : Service() {
         if (locked) { triggeredUntil = 0; update("Unlock your phone to give a command."); return }
         val normalized = WakeCommands.normalize(command,phrase)
         if (normalized.isNotBlank()) {
-            val reply = runCatching { WakeCommands.local(this,normalized) }.getOrElse { "Device action unavailable." }
+            val screenAction = ScreenCommands.handles(normalized) && foregroundCommand == null
+            val reply = runCatching {
+                if (screenAction) AssistantAccessibility.active?.let { ScreenCommands.run(it,normalized) } ?: "Enable AITRONICS in Accessibility settings first."
+                else WakeCommands.local(this,normalized)
+            }.getOrElse { "Device action unavailable." }
             if (reply != null) {
-                pending = null; update(reply)
-                if (speechReady) speaker?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"wake-reply")
+                pending = null; update(if (normalized.lowercase() in setOf("read draft","send message")) "Review your message in the open chat." else reply)
+                if (speechReady) {
+                    suppressAudioUntil = SystemClock.elapsedRealtime() + 600
+                    speaker?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"wake-reply")
+                }
                 return
             }
         }

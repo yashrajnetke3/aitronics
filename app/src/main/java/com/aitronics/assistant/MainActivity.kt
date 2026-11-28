@@ -177,7 +177,7 @@ class MainActivity : ComponentActivity() {
     }
     private fun deviceCommand(q: String): String? {
         val s = q.lowercase().trim().removePrefix("hey aitronics").trim().trimStart(',').trim()
-        if(s == "read screen" || s == "scroll down" || s == "scroll up") {
+        if(s == "read screen" || ScreenCommands.handles(q)) {
             val service = AssistantAccessibility.active ?: return "Enable AITRONICS accessibility first."
             android.app.AlertDialog.Builder(this).setMessage("Switch back to the previous app and run “$s” on that screen?")
                 .setNegativeButton("Cancel",null).setPositiveButton("Continue") { _,_ ->
@@ -190,10 +190,12 @@ class MainActivity : ComponentActivity() {
                                 locked -> "Unlock your phone to use screen commands."
                                 AssistantAccessibility.active !== service -> "Accessibility disconnected."
                                 s == "read screen" -> service.screenText()
-                                service.scroll(s == "scroll down") -> "Scroll accepted."
-                                else -> "No accessible scrolling target."
+                                else -> runCatching { ScreenCommands.run(service,q) }.getOrDefault("This app could not complete the screen command.")
                             }
-                            answer(reply)
+                            if (s == "read draft" || s == "send message") {
+                                if (speak && speechReady) tts?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"draft")
+                                else android.widget.Toast.makeText(this,reply,android.widget.Toast.LENGTH_LONG).show()
+                            } else answer(reply)
                         }
                     }, 900L)
                 }.show()
@@ -238,7 +240,7 @@ class MainActivity : ComponentActivity() {
         runCatching { deviceCommand(q) }.getOrElse { "Device action unavailable or permission denied." }?.let { answer(it); return }
         val lower = q.lowercase()
         if (lower == "help") {
-            answer("Try open WhatsApp, battery level, volume up, read screen, scroll down, dial 12345, message 12345, summarize notifications, remember my shift starts at nine, recall memory, or remind me in 10 minutes to check the line.")
+            answer("Try Hey, open WhatsApp; open chat with Sam; write message I am on my way; read draft; send message; confirm send; scroll down; close camera; battery level, volume up, read screen, scroll down, dial 12345, message 12345, summarize notifications, remember my shift starts at nine, recall memory, or remind me in 10 minutes to check the line.")
             return
         }
         if (lower.startsWith("remember ")) { memory { it.add(Memory(note=q.substringAfter(' ').take(4000))); "Saved to local memory." }; return }

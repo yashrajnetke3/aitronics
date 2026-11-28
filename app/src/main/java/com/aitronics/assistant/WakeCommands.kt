@@ -13,6 +13,7 @@ object WakeCommands {
         if (phrase.equals("hey aitronics", true)) {
             for (name in names) for (hi in listOf("hey", "hay", "hi", "he", "a")) prefixes += "$hi $name"
         }
+        if (phrase.equals("hey aitronics",true) || phrase.equals("hey",true)) prefixes += listOf("hey","hay")
         val words = text.trim().trimEnd('.', '!', '?')
         for (prefix in prefixes.filter { it.isNotEmpty() }.sortedByDescending { it.length }) {
             if (words.equals(prefix,true)) return ""
@@ -26,6 +27,12 @@ object WakeCommands {
         val light = Regex("""(?:please )?(open|close|switch on|turn on|switch off|turn off) (?:the |my )?(?:flashlight|flash light|light|torch)(?: please)?""",RegexOption.IGNORE_CASE).matchEntire(s)
         if (light != null) return if (light.groupValues[1].lowercase() in listOf("open","switch on","turn on")) "turn on flashlight" else "turn off flashlight"
         return when(s.lowercase()) {
+            "open teligaram","open teligram","open tele gram","open telegraph" -> "open Telegram"
+            "open whatapp","open whats app","open whats up","open what app","open what sap","open what’s app" -> "open WhatsApp"
+            "scroll dow","swipe up","scroll it down" -> "scroll down"
+            "swipe down","scroll it up" -> "scroll up"
+            "read written message","read my message","read the draft","read written massage","read my draft","read message" -> "read draft"
+            "send","send it","send the message","send massage" -> "send message"
             "light on","torch on","flashlight on" -> "turn on flashlight"
             "light off","torch off","flashlight off" -> "turn off flashlight"
             "open the camera","start camera","launch camera" -> "open camera"

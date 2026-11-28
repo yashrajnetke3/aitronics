@@ -18,3 +18,7 @@ Start by typing **battery level**. **Open WhatsApp** launches an installed app b
 GitHub Actions builds the debug APK, runs Android lint, and exercises the chat interface on an Android emulator. To run locally, use JDK 21, Gradle 8.9 and Android SDK 35. Run `gradle :app:assembleDebug :app:lintDebug`, then `gradle :app:connectedDebugAndroidTest` with an Android device connected.
 
 Background recognition uses the bundled Vosk small US-English 0.15 model (Alpha Cephei, Apache-2.0). The build downloads the model archive and verifies its SHA-256. Microphone audio is processed on the phone.
+
+### Commands while another app is open
+
+After hands-free setup, say **Hey** or **Hey AITRONICS**, followed by your command. Enable AITRONICS accessibility for screen commands. Say **Hey, close camera** to return Home from Camera, or **Hey, scroll down** in a scrollable app. To dictate, open WhatsApp or Telegram, then use **open chat with Sam** when that chat is visible, **write message I am on my way**, **read draft**, **send message**, and **confirm send**. Use the wake word for each command. Approval expires after 45 seconds and requires the same visible recipient and draft. If Android or the messaging app hides a required control, use the app’s native button.
