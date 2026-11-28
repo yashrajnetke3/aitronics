@@ -182,7 +182,7 @@ class BackgroundWake : Service() {
         val command = when {
             tail != null -> tail
             now <= triggeredUntil -> words
-            now <= followUntil && ScreenCommands.followUp(WakeCommands.normalize(words,phrase)) -> words
+            now <= followUntil && ScreenCommands.followUp(WakeCommands.normalizeSpeech(words,phrase)) -> words
             else -> return
         }
         triggeredUntil = if (command.isBlank()) now + 10000 else 0
@@ -196,7 +196,7 @@ class BackgroundWake : Service() {
             return
         }
         if(command.isNotBlank()) NeonBubble.received()
-        val normalized = WakeCommands.normalize(command,phrase)
+        val normalized = WakeCommands.normalizeSpeech(command,phrase)
         followUntil = if (normalized.startsWith("open ",true) || ScreenCommands.handles(normalized)) now + 15000 else 0
         if (normalized.isNotBlank()) {
             val screenAction = ScreenCommands.handles(normalized) && foregroundCommand == null

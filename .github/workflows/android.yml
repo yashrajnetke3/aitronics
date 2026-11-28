@@ -45,6 +45,15 @@ jobs:
             adb shell am start -W -n com.aitronics.assistant/.MainActivity
             sleep 2
             adb exec-out screencap -p > assistant-home.png
+      - name: Check voice routing and permission feedback on Android 16
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          ram-size: 4096M
+          disk-size: 6144M
+          disable-animations: true
+          script: gradle :app:connectedDebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.class=com.aitronics.assistant.AssistantTest#bundledSpeechModelRoutesAudio,com.aitronics.assistant.AssistantTest#unavailableAppsAndDeniedAccessibilityHaveVisibleReplies"
       - name: Save tested home screen
         uses: actions/upload-artifact@v4
         with:

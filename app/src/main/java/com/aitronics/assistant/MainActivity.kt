@@ -52,7 +52,7 @@ class MainActivity : ComponentActivity() {
     private val voice = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
             val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
-            if (text.isBlank()) answer("I didn’t hear a question. Tap Voice input and try again.") else { input=text; send() }
+            if (text.isBlank()) answer("I didn’t hear a question. Tap Voice input and try again.") else { input=WakeCommands.normalizeSpeech(text,wakePhrase); send() }
         }
     }
     private var wakePhrase by mutableStateOf("hey aitronics")
@@ -362,7 +362,7 @@ class MainActivity : ComponentActivity() {
         wakePhrase = prefs.getString("wakePhrase","hey aitronics") ?: "hey aitronics"
         localVoice = LocalVoice(this) { command, status ->
             listening = false
-            if (!command.isNullOrBlank()) { input = command; send() }
+            if (!command.isNullOrBlank()) { input = WakeCommands.normalizeSpeech(command,wakePhrase); send() }
             else answer(status ?: "I didn’t hear any words. Try Voice input again or type your question.")
         }
         apiKey = loadKey()

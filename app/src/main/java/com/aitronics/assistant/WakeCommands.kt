@@ -10,6 +10,7 @@ object WakeCommands {
     fun afterWake(text: String, phrase: String): String? {
         val prefixes = mutableListOf(phrase.trim())
         if (phrase.equals("hey aitronics", true)) {
+            prefixes += listOf("haley drawn next", "hey nature run acts")
             for (name in names) for (hi in listOf("hey", "hay", "hi", "he", "a")) prefixes += "$hi $name"
         }
         if (phrase.equals("hey aitronics",true) || phrase.equals("hey",true)) prefixes += listOf("hey","hay")
@@ -44,6 +45,16 @@ object WakeCommands {
             else -> s
         }
     }
+    fun normalizeSpeech(text: String, phrase: String): String {
+        val command = normalize(text, phrase)
+        return when (command.lowercase()) {
+            "battery a level" -> "battery level"
+            "close cameron" -> "close camera"
+            "open and camera" -> "open camera"
+            else -> command
+        }
+    }
+
     fun local(context: Context, command: String): String? {
         DeviceReadings.answer(context, command)?.let { return it }
         return when(command.lowercase()) {

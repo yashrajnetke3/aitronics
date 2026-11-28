@@ -95,6 +95,65 @@ class AssistantTest {
         ui.waitUntil(10000) { !BackgroundWake.running }
     }
 
+    @Test fun bundledSpeechModelRoutesAudio() {
+        val inst = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        val directory = java.nio.file.Files.createTempDirectory(inst.targetContext.cacheDir.toPath(), "voice-test").toFile()
+        try {
+            java.util.zip.ZipInputStream(inst.targetContext.assets.open("wake-en-015.zip")).use { zip ->
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    if (!entry.isDirectory) {
+                        val file = java.io.File(directory, entry.name).canonicalFile
+                        require(file.path.startsWith(directory.canonicalPath + java.io.File.separator))
+                        file.parentFile?.mkdirs()
+                        file.outputStream().use { zip.copyTo(it) }
+                    }
+                }
+            }
+            val phrase = "hey aitronics"
+            org.vosk.Model(java.io.File(directory, "vosk-model-small-en-us-0.15").path).use { model ->
+                fun recognize(name: String): String {
+                    val words = mutableListOf<String>()
+                    org.vosk.Recognizer(model, 16000f).use { recognizer ->
+                        java.util.zip.GZIPInputStream(inst.context.assets.open("voice/$name.gz")).use { input ->
+                            val buffer = ByteArray(3200)
+                            while (true) {
+                                var count = 0
+                                while (count < buffer.size) {
+                                    val read = input.read(buffer, count, buffer.size - count)
+                                    if (read < 0) break
+                                    count += read
+                                }
+                                if (count == 0) break
+                                if (recognizer.acceptWaveForm(buffer, count)) {
+                                    words += org.json.JSONObject(recognizer.result).optString("text")
+                                }
+                            }
+                        }
+                        words += org.json.JSONObject(recognizer.finalResult).optString("text")
+                    }
+                    return words.filter(String::isNotBlank).joinToString(" ")
+                }
+                for (name in listOf("long-wake", "short-wake")) {
+                    val heard = recognize(name)
+                    org.junit.Assert.assertEquals("$name decoded as $heard", "", WakeCommands.afterWake(heard, phrase))
+                }
+                for ((name, expected) in mapOf("camera" to "open camera", "close" to "close camera", "battery" to "battery level")) {
+                    val heard = recognize(name)
+                    org.junit.Assert.assertEquals("$name decoded as $heard", expected, WakeCommands.normalizeSpeech(heard, phrase))
+                }
+                org.junit.Assert.assertNull(WakeCommands.afterWake(recognize("negative"), phrase))
+            }
+        } finally { directory.deleteRecursively() }
+    }
+
+    @Test fun unavailableAppsAndDeniedAccessibilityHaveVisibleReplies() {
+        send("open nonexistent aitronics test application")
+        waitForReply("No installed app matched")
+        send("close camera")
+        waitForReply("Enable AITRONICS accessibility")
+    }
+
     @Test fun shortWakeAndChatCommands() {
         org.junit.Assert.assertEquals("", WakeCommands.afterWake("hey", "hey aitronics"))
         org.junit.Assert.assertEquals("close camera", WakeCommands.afterWake("hey close camera", "hey aitronics"))
