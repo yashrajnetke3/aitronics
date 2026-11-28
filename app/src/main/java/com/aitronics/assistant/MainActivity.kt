@@ -261,7 +261,7 @@ class MainActivity : ComponentActivity() {
         keyboard.hideSoftInputFromWindow(window.decorView.windowToken, 0)
         input = ""
         val privateCommand = ScreenCommands.handles(q) || q.equals("read screen", true) || q.startsWith("message ",true)
-        messages.add("user" to when { privateCommand -> "Device command"; q.startsWith("remember ",true) -> "Save personal memory"; else -> q })
+        messages.add("user" to when { privateCommand -> "Device command"; q.startsWith("remember ",true) -> "Save personal memory"; MemoryReview.handles(q) -> "Manage personal memory"; else -> q })
         runCatching { deviceCommand(q) }.getOrElse { "Device action unavailable or permission denied." }?.let { answer(it); return }
         val lower = q.lowercase()
         if (lower == "help") {
@@ -269,7 +269,12 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (lower.startsWith("remember ")) { memory { it.add(Memory(note=q.substringAfter(' ').take(4000))); "Saved to local memory." }; return }
-        if (lower == "recall memory") { memory(privateReply = true) { it.recent().joinToString("\n").ifBlank { "No saved memories." } }; return }
+        if (lower == "recall memory") {
+            memory(privateReply = true) { dao -> dao.records().joinToString("\n") { "#${it.id}  ${NoteCipher.decrypt(it.note)}" }
+                .ifBlank { "No saved memories." } }
+            return
+        }
+        if (MemoryReview.handles(q)) { MemoryReview.open(this, q, ::answer); return }
         if (lower == "forget all memories") {
             android.app.AlertDialog.Builder(this).setMessage("Delete all saved memories?").setNegativeButton("Cancel",null)
                 .setPositiveButton("Delete") { _, _ -> memory { it.clear(); "Memories deleted." } }.show()

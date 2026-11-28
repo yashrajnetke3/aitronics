@@ -15,6 +15,16 @@ abstract class MemoryDao {
     fun recent(): List<String> = ciphertext().map(NoteCipher::decrypt)
     @Insert protected abstract fun insertCiphertext(memory: Memory)
     @Query("SELECT note FROM Memory ORDER BY id DESC LIMIT 50") protected abstract fun ciphertext(): List<String>
+    @Query("SELECT * FROM Memory ORDER BY id DESC LIMIT 50") abstract fun records(): List<Memory>
+    @Query("SELECT * FROM Memory WHERE id = :id") abstract fun snapshot(id: Long): Memory?
+    @Query("DELETE FROM Memory WHERE id = :id AND note = :original")
+    abstract fun deleteIfCurrent(id: Long, original: String): Int
+    @Query("UPDATE Memory SET note = :replacement WHERE id = :id AND note = :original")
+    protected abstract fun updateIfCurrent(id: Long, original: String, replacement: String): Int
+    fun correct(snapshot: Memory, replacement: String): Boolean {
+        require(replacement.isNotBlank() && replacement.length <= 4000)
+        return updateIfCurrent(snapshot.id, snapshot.note, NoteCipher.encrypt(replacement)) == 1
+    }
     @Query("DELETE FROM Memory") abstract fun clear()
 }
 

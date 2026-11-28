@@ -62,3 +62,54 @@ jobs:
               for failure in ET.parse(report).iter("failure"):
                   print((failure.text or failure.get("message", ""))[:6000])
           PYTEST
+
+      - name: Check release signing configuration
+        if: success() && github.ref == 'refs/heads/main'
+        id: signing
+        shell: bash
+        env:
+          KEYSTORE: ${{ secrets.AITRONICS_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.AITRONICS_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.AITRONICS_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.AITRONICS_KEY_PASSWORD }}
+        run: |
+          count=0
+          for setting in KEYSTORE STORE_PASS KEY_ALIAS KEY_PASS; do
+            if [[ -n "${!setting}" ]]; then count=$((count + 1)); fi
+          done
+          case "$count" in
+            0) echo 'ready=false' >> "$GITHUB_OUTPUT" ;;
+            4) echo 'ready=true' >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::Incomplete release signing configuration"; exit 1 ;;
+          esac
+
+      - name: Assemble unsigned release
+        if: steps.signing.outputs.ready == 'true'
+        run: gradle :app:assembleRelease :app:lintRelease
+
+      - name: Sign and verify release APK
+        if: steps.signing.outputs.ready == 'true'
+        shell: bash
+        env:
+          KEYSTORE: ${{ secrets.AITRONICS_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.AITRONICS_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.AITRONICS_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.AITRONICS_KEY_PASSWORD }}
+        run: |
+          umask 077
+          store=$(mktemp)
+          trap 'rm -f "$store"' EXIT
+          echo -n "$KEYSTORE" | base64 --decode > "$store"
+          signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          "$signer" sign --ks "$store" --ks-key-alias "$KEY_ALIAS" --ks-pass env:STORE_PASS --key-pass env:KEY_PASS --out AITRONICS.apk app/build/outputs/apk/release/app-release-unsigned.apk
+          "$signer" verify --verbose --print-certs AITRONICS.apk
+          sha256sum AITRONICS.apk > AITRONICS.apk.sha256
+
+      - name: Save signed release
+        if: steps.signing.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AITRONICS-release
+          path: |
+            AITRONICS.apk
+            AITRONICS.apk.sha256

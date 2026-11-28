@@ -48,6 +48,14 @@ class MemoryMigrationTest {
                     }
                     assertEquals(listOf(3L,9L,10L), ids)
                 }
+                val notes = migrated.notes()
+                val selected = requireNotNull(notes.snapshot(9))
+                assertTrue(notes.correct(selected, "corrected note"))
+                assertFalse(notes.correct(selected, "stale edit"))
+                assertEquals(0, notes.deleteIfCurrent(selected.id, selected.note))
+                val reviewed = requireNotNull(notes.snapshot(9))
+                assertEquals(1, notes.deleteIfCurrent(reviewed.id, reviewed.note))
+                assertEquals(listOf("second", "first"), notes.recent())
                 migrated.openHelper.writableDatabase.execSQL("UPDATE Memory SET note='invalid' WHERE id=3")
                 assertTrue(runCatching { migrated.notes().recent() }.isFailure)
             } finally { migrated.close() }
