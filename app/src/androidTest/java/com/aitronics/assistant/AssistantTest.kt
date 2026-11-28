@@ -147,6 +147,27 @@ class AssistantTest {
         } finally { directory.deleteRecursively() }
     }
 
+    @Test fun openCameraReachesAnInstalledCameraOrExplainsItsAbsence() {
+        val inst = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        val camera = android.content.Intent(android.provider.MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
+        val candidates = inst.targetContext.packageManager.queryIntentActivities(camera, 0)
+            .map { it.activityInfo.packageName }.toSet()
+        send("Hey AITRONICS open camera")
+        if (candidates.isEmpty()) {
+            waitForReply("No compatible application found")
+            return
+        }
+        try {
+            ui.waitUntil(15000) {
+                inst.uiAutomation.rootInActiveWindow?.packageName?.toString() in candidates
+            }
+        } finally {
+            inst.uiAutomation.executeShellCommand("input keyevent KEYCODE_BACK").use {
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes()
+            }
+        }
+    }
+
     @Test fun unavailableAppsAndDeniedAccessibilityHaveVisibleReplies() {
         send("open nonexistent aitronics test application")
         waitForReply("No installed app matched")
