@@ -158,6 +158,25 @@ class AssistantTest {
         ui.onNodeWithText("Download & answer · 547 MB").assertDoesNotExist()
     }
 
+    @Test fun privateCommandsStayOutOfSavedChat() {
+        val prefs = ui.activity.getPreferences(android.content.Context.MODE_PRIVATE)
+        val previous = prefs.all["saveHistory"] as? Boolean
+        val originalHistory = prefs.getString("history", null)
+        try {
+            prefs.edit().putBoolean("saveHistory", true).commit()
+            ui.activityRule.scenario.recreate()
+            send("write message private draft specimen")
+            waitForReply("Device command")
+            val stored = prefs.getString("history", "").orEmpty()
+            org.junit.Assert.assertTrue(stored.contains("Device command"))
+            org.junit.Assert.assertFalse(stored.contains("private draft specimen"))
+        } finally {
+            val edit = prefs.edit().putString("history", originalHistory)
+            if (previous == null) edit.remove("saveHistory") else edit.putBoolean("saveHistory", previous)
+            edit.commit()
+        }
+    }
+
     @Test fun deviceChecksValidateTheWholePlan() {
         send("check my battery and then free storage")
         waitForReply("Free storage:")

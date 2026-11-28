@@ -24,5 +24,6 @@ The last green baseline before this cycle was [run 35](https://github.com/yashra
 - [x] Cover chat integration, limits, unknown actions, duplicate actions and unrelated input in instrumentation.
 - [ ] Gate this checkpoint on assemble, lint and the API 35 suite including model smoke. Check the Actions run for this commit before resuming.
 - [ ] Verify acoustic wake on a physical phone with overlay enabled and disabled, screen locked and after Stop.
-- [ ] Next independent module: isolate private screen results from persisted conversations and test that path. Then migrate Room notes with recovery tests before enabling additional personal memory features.
+- [x] Deliver screen action replies transiently. Redact messaging and screen commands from chat history and screen replies from foreground-service notification text. Add a saved-history regression test. Historical records are unchanged.
+- [ ] Next independent module: migrate Room notes to Keystore-backed ciphertext with rollback and recovery tests.
 - [ ] Obtain authorized stable release signer and verify an in-place upgrade with existing notes before production distribution. The CI artifact is debug-signed.

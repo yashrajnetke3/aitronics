@@ -205,7 +205,7 @@ class BackgroundWake : Service() {
                 else WakeCommands.local(this,normalized)
             }.getOrElse { "Device action unavailable." }
             if (reply != null) {
-                pending = null; update(if (normalized.lowercase() in setOf("read draft","send message")) "Review your message in the open chat." else reply)
+                pending = null; update(if (screenAction) "Screen command handled. Review the open app." else reply)
                 if (speechReady) {
                     suppressAudioUntil = SystemClock.elapsedRealtime() + 600
                     speaker?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"wake-reply")

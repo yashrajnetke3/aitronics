@@ -209,10 +209,8 @@ class MainActivity : ComponentActivity() {
                                 s == "read screen" -> service.screenText()
                                 else -> runCatching { ScreenCommands.run(service,q) }.getOrDefault("This app could not complete the screen command.")
                             }
-                            if (s == "read draft" || s == "send message") {
-                                if (speak && speechReady) tts?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"draft")
-                                else android.widget.Toast.makeText(this,reply,android.widget.Toast.LENGTH_LONG).show()
-                            } else answer(reply)
+                            if (speak && speechReady) tts?.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"screen-action")
+                            else android.widget.Toast.makeText(this,reply,android.widget.Toast.LENGTH_LONG).show()
                         }
                     }, 900L)
                 }.show()
@@ -255,7 +253,8 @@ class MainActivity : ComponentActivity() {
         val keyboard = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
         keyboard.hideSoftInputFromWindow(window.decorView.windowToken, 0)
         input = ""
-        messages.add("user" to q)
+        val privateCommand = ScreenCommands.handles(q) || q.equals("read screen", true) || q.startsWith("message ",true)
+        messages.add("user" to if (privateCommand) "Device command" else q)
         runCatching { deviceCommand(q) }.getOrElse { "Device action unavailable or permission denied." }?.let { answer(it); return }
         val lower = q.lowercase()
         if (lower == "help") {
