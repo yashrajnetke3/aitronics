@@ -368,7 +368,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         if(listening) Text(if(wakeRequested) "Listening for “$wakePhrase” followed by a command" else "Listening…")
-                        if(BackgroundWake.status.isNotEmpty() && BackgroundWake.enabled(this)) Text(BackgroundWake.status)
+                        if(BackgroundWake.status.isNotEmpty() && BackgroundWake.enabled(this@MainActivity)) Text(BackgroundWake.status)
                         if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                         OutlinedTextField(input,{input=it},modifier=Modifier.fillMaxWidth(),placeholder={Text("Ask or enter a command")},maxLines=4,shape=RoundedCornerShape(20.dp))
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
